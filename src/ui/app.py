@@ -83,15 +83,15 @@ PIPELINE_NEXT_STEP = {
 
 APP_CSS = """
 :root {
-    --brand: #256f63;
-    --brand-dark: #17483f;
-    --accent: #5b5bd6;
-    --conversation-agent: #2f5f9f;
-    --conversation-agent-label: #24528a;
+    --brand: #2f6f63;
+    --brand-dark: #1f4f47;
+    --accent: #586174;
+    --conversation-agent: #345f92;
+    --conversation-agent-label: #2f527b;
     --ink: #1f2937;
     --muted: #667085;
-    --line: #d8dee8;
-    --surface: #f6f7fb;
+    --line: #d7dde6;
+    --surface: #f4f6f8;
     --panel: #ffffff;
     --success: #17845b;
     --warning: #a15c07;
@@ -103,7 +103,7 @@ APP_CSS = """
     width: 100vw !important;
     min-height: 100vh !important;
     margin: 0 !important;
-    background: linear-gradient(180deg, #f5f7fb 0%, #eef4f1 100%) !important;
+    background: #f4f6f8 !important;
     color: var(--ink) !important;
 }
 
@@ -119,10 +119,30 @@ APP_CSS = """
     gap: 24px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.82);
+    background: #ffffff;
     padding: 10px 12px;
     margin-bottom: 10px;
     box-shadow: 0 1px 3px rgba(31, 41, 55, 0.04);
+}
+
+.gradio-container .block-info {
+    background: #eef2f5 !important;
+    color: #344054 !important;
+    border-radius: 6px !important;
+}
+
+.gradio-container label,
+.gradio-container label span,
+.gradio-container .block label,
+.gradio-container .block label span,
+.gradio-container .block-info {
+    color: #344054 !important;
+}
+
+.gradio-container label > span,
+.gradio-container .block-info {
+    background: #eef2f5 !important;
+    border-color: #d7dde6 !important;
 }
 
 .app-brand {
@@ -219,6 +239,29 @@ APP_CSS = """
     gap: 12px;
 }
 
+.workspace-main {
+    min-height: 0;
+}
+
+.workspace-side {
+    max-height: calc(100vh - 320px);
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+}
+
+.workspace-side::after {
+    position: sticky;
+    bottom: 0;
+    display: block;
+    height: 22px;
+    margin-top: -22px;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,0), #ffffff 82%);
+    content: "";
+}
+
 .analyze-button,
 .refresh-button,
 .export-button,
@@ -254,8 +297,8 @@ APP_CSS = """
 
 .refresh-button,
 .refresh-button button {
-    background: #eef5f2 !important;
-    border-color: #bfd9d2 !important;
+    background: #eef2f1 !important;
+    border-color: #c9d6d3 !important;
     color: var(--brand-dark) !important;
 }
 
@@ -317,11 +360,11 @@ APP_CSS = """
 }
 
 .status-card {
-    border: 1px solid #cfeee6;
+    border: 1px solid #cbded9;
     border-left: 5px solid var(--brand);
     border-radius: 8px;
     padding: 12px;
-    background: #effaf6;
+    background: #f1f6f4;
 }
 
 .status-title {
@@ -353,23 +396,19 @@ APP_CSS = """
     height: 7px;
     overflow: hidden;
     border-radius: 999px;
-    background: #d8eee8;
+    background: #d8e5e1;
 }
 
 .progress-bar {
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--brand), var(--accent));
+    background: var(--brand);
     transition: width 240ms ease;
     position: relative;
 }
 
 .progress-bar::after {
-    animation: progress-shine 1.2s linear infinite;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
-    content: "";
-    inset: 0;
-    position: absolute;
+    content: none;
 }
 
 @keyframes progress-shine {
@@ -450,7 +489,7 @@ APP_CSS = """
     justify-content: space-between;
     gap: 12px;
     padding: 12px 14px;
-    background: #eef5f2;
+    background: #f1f4f5;
     border-bottom: 1px solid #e4e9f1;
 }
 
@@ -482,7 +521,7 @@ APP_CSS = """
 
 .conversation-pill-confidence {
     color: #3d4a5c;
-    background: #e6e8ff;
+    background: #e8ebf2;
 }
 
 .conversation-pill-warning {
@@ -494,6 +533,7 @@ APP_CSS = """
     padding: 14px 14px 16px;
     max-height: clamp(320px, calc(100vh - 360px), 560px);
     overflow-y: auto;
+    scrollbar-gutter: stable;
 }
 
 .conversation-row {
@@ -545,8 +585,8 @@ APP_CSS = """
 
 .conversation-bubble-customer {
     color: #1d2939;
-    background: #f0f1ff;
-    border: 1px solid #dde2ff;
+    background: #f4f5f9;
+    border: 1px solid #dfe3ec;
 }
 
 .conversation-summary {
@@ -557,7 +597,7 @@ APP_CSS = """
     border-left: 5px solid var(--success);
     border-radius: 7px;
     color: #14532d;
-    background: #e5f8ee;
+    background: #edf6f1;
 }
 
 .conversation-audio-warning {
@@ -572,9 +612,23 @@ APP_CSS = """
 }
 
 .transcript-box textarea {
-    min-height: 220px !important;
+    min-height: 160px !important;
     max-height: 34vh !important;
     overflow-y: auto !important;
+}
+
+.raw-transcript-panel {
+    border: 1px solid #e4e9f1;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px;
+}
+
+.raw-transcript-title {
+    margin: 0 0 8px;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 850;
 }
 
 .content-panel {
@@ -598,6 +652,69 @@ APP_CSS = """
 
 .content-panel-body {
     padding: 14px;
+}
+
+.summary-accordion {
+    display: grid;
+    gap: 9px;
+}
+
+.summary-section {
+    border: 1px solid #e1e7ef;
+    border-radius: 7px;
+    background: #ffffff;
+}
+
+.summary-section summary {
+    cursor: pointer;
+    padding: 11px 12px;
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 850;
+    list-style: none;
+}
+
+.summary-section summary::-webkit-details-marker {
+    display: none;
+}
+
+.summary-section summary::after {
+    float: right;
+    color: #667085;
+    content: "+";
+    font-weight: 900;
+}
+
+.summary-section[open] summary {
+    border-bottom: 1px solid #edf1f5;
+    background: #f7f9fb;
+}
+
+.summary-section[open] summary::after {
+    content: "-";
+}
+
+.summary-section-body {
+    padding: 11px 12px 12px;
+}
+
+.summary-section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+}
+
+.summary-section-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.summary-section-list li {
+    margin-bottom: 6px;
+    color: #111827;
+    font-size: 14px;
+    line-height: 1.45;
+    font-weight: 600;
 }
 
 .summary-grid,
@@ -626,7 +743,7 @@ APP_CSS = """
 .summary-label,
 .qa-label {
     margin: 0 0 5px;
-    color: #0f766e;
+    color: #2f6f63;
     font-size: 11px;
     font-weight: 800;
     text-transform: uppercase;
@@ -841,8 +958,19 @@ textarea {
     }
 
     .summary-grid,
-    .qa-grid {
+    .qa-grid,
+    .summary-section-grid {
         grid-template-columns: 1fr;
+    }
+
+    .workspace-side {
+        max-height: none;
+        overflow-y: visible;
+        padding-right: 0;
+    }
+
+    .workspace-side::after {
+        content: none;
     }
 }
 
@@ -1084,7 +1212,8 @@ def copy_audio_to_data_dir(audio_path: str) -> str:
 
 
 def format_summary_html(result: dict) -> str:
-    """Format summary details as compact HTML cards."""
+    """Format summary details as expandable sections."""
+    result = hydrate_summary_result(result)
     if not result.get("summary"):
         return (
             "<div class='content-panel'>"
@@ -1096,32 +1225,53 @@ def format_summary_html(result: dict) -> str:
         )
 
     usage = get_token_usage(result)
-    fields = [
-        ("Summary", result.get("summary") or "No summary was generated.", True),
-        ("Sentiment", result.get("sentiment") or "N/A", False),
-        ("Call Purpose", result.get("call_purpose") or "N/A", False),
-        ("Resolution Status", result.get("resolution_status") or "N/A", False),
-        ("Sentiment Trajectory", result.get("sentiment_trajectory") or "N/A", False),
-        ("Key Entities", format_summary_list(result.get("key_entities")), True),
-        (
-            "Key Discussion Points",
-            format_summary_list(result.get("key_discussion_points")),
-            True,
-        ),
-        ("Action Items", format_summary_list(result.get("action_items")), True),
-        ("Agent Behavior", result.get("agent_behavior") or "N/A", True),
-        ("Compliance Flag", str(result.get("compliance_flag", "N/A")), False),
-        ("Overall QA", str(result.get("overall_score", "N/A")), False),
-    ]
-
-    cards = "".join(
-        (
-            f"<div class='summary-card {'summary-card-wide' if wide else ''}'>"
-            f"<p class='summary-label'>{escape(label)}</p>"
-            f"<p class='summary-value'>{escape(str(value))}</p>"
-            "</div>"
-        )
-        for label, value, wide in fields
+    context_cards = format_summary_cards(
+        [
+            ("Sentiment", result.get("sentiment") or "N/A"),
+            ("Call Purpose", result.get("call_purpose") or "N/A"),
+            ("Resolution Status", result.get("resolution_status") or "N/A"),
+            ("Sentiment Trajectory", result.get("sentiment_trajectory") or "N/A"),
+            ("Key Entities", format_summary_list(result.get("key_entities")), True),
+        ],
+    )
+    follow_up_html = (
+        "<div class='summary-section-grid'>"
+        f"{format_summary_list_card('Key Discussion Points', result.get('key_discussion_points'))}"
+        f"{format_summary_list_card('Action Items', result.get('action_items'))}"
+        "</div>"
+    )
+    review_cards = format_summary_cards(
+        [
+            ("Agent Behavior", result.get("agent_behavior") or "N/A", True),
+            ("Compliance Flag", str(result.get("compliance_flag", "N/A"))),
+            ("Overall QA", str(result.get("overall_score", "N/A"))),
+        ],
+    )
+    sections = "".join(
+        [
+            format_summary_section_html(
+                "Executive Summary",
+                (
+                    "<p class='summary-value'>"
+                    f"{escape(str(result.get('summary') or 'No summary was generated.'))}"
+                    "</p>"
+                ),
+                open_by_default=True,
+            ),
+            format_summary_section_html(
+                "Call Context",
+                f"<div class='summary-section-grid'>{context_cards}</div>",
+                open_by_default=True,
+            ),
+            format_summary_section_html(
+                "Discussion Points and Action Items",
+                follow_up_html,
+            ),
+            format_summary_section_html(
+                "Agent and Compliance Review",
+                f"<div class='summary-section-grid'>{review_cards}</div>",
+            ),
+        ],
     )
 
     return (
@@ -1130,7 +1280,7 @@ def format_summary_html(result: dict) -> str:
         "<h3 class='content-panel-title'>Summary</h3>"
         "</div>"
         "<div class='content-panel-body'>"
-        f"<div class='summary-grid'>{cards}</div>"
+        f"<div class='summary-accordion'>{sections}</div>"
         "<div class='usage-inline'>"
         f"{format_usage_label(usage)} summary tokens: "
         f"input {usage['summary_input']:,}, "
@@ -1142,6 +1292,60 @@ def format_summary_html(result: dict) -> str:
     )
 
 
+def format_summary_section_html(
+    title: str,
+    body_html: str,
+    *,
+    open_by_default: bool = False,
+) -> str:
+    """Format an expandable summary section."""
+    open_attr = " open" if open_by_default else ""
+    return (
+        f"<details class='summary-section'{open_attr}>"
+        f"<summary>{escape(title)}</summary>"
+        f"<div class='summary-section-body'>{body_html}</div>"
+        "</details>"
+    )
+
+
+def format_summary_cards(fields: list[tuple]) -> str:
+    """Format summary fields as cards inside an accordion."""
+    cards = ""
+    for field in fields:
+        label = field[0]
+        value = field[1]
+        wide = bool(field[2]) if len(field) > 2 else False
+        cards += (
+            f"<div class='summary-card {'summary-card-wide' if wide else ''}'>"
+            f"<p class='summary-label'>{escape(label)}</p>"
+            f"<p class='summary-value'>{escape(str(value))}</p>"
+            "</div>"
+        )
+    return cards
+
+
+def format_summary_list_card(label: str, value) -> str:
+    """Format a list-valued summary field as a readable card."""
+    return (
+        "<div class='summary-card summary-card-wide'>"
+        f"<p class='summary-label'>{escape(label)}</p>"
+        f"{format_summary_list_html(value)}"
+        "</div>"
+    )
+
+
+def format_summary_list_html(value) -> str:
+    """Format SummaryResult list fields as HTML list content."""
+    if not value:
+        return "<p class='summary-value'>N/A</p>"
+
+    if isinstance(value, str):
+        return f"<p class='summary-value'>{escape(value)}</p>"
+
+    items = "".join(f"<li>{escape(str(item))}</li>" for item in value)
+    return f"<ul class='summary-section-list'>{items}</ul>"
+
+
 def format_summary_list(value) -> str:
     """Format SummaryResult list fields for compact display."""
     if not value:
@@ -1151,6 +1355,50 @@ def format_summary_list(value) -> str:
         return value
 
     return "\n".join(f"- {item}" for item in value)
+
+
+def hydrate_summary_result(result: dict) -> dict:
+    """Fill missing summary UI fields from structured summary/report JSON."""
+    hydrated = dict(result)
+    summary_data = parse_summary_payload(hydrated.get("summary_json"))
+    report_summary_data = parse_report_summary_payload(hydrated.get("report_json"))
+
+    for source in (summary_data, report_summary_data):
+        for key in (
+            "summary",
+            "sentiment",
+            "agent_behavior",
+            "call_purpose",
+            "key_entities",
+            "key_discussion_points",
+            "action_items",
+            "resolution_status",
+            "sentiment_trajectory",
+        ):
+            if not hydrated.get(key) and source.get(key):
+                hydrated[key] = source[key]
+
+    return hydrated
+
+
+def parse_summary_payload(summary_json: str | None) -> dict:
+    """Parse SummaryResult JSON from the pipeline state."""
+    if not summary_json:
+        return {}
+
+    try:
+        payload = json.loads(summary_json)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+    return payload if isinstance(payload, dict) else {}
+
+
+def parse_report_summary_payload(report_json: str | None) -> dict:
+    """Parse nested summary details from generated report JSON."""
+    payload = parse_report_json(report_json)
+    summary_data = payload.get("summary", {})
+    return summary_data if isinstance(summary_data, dict) else {}
 
 
 def format_qa_scorecard_html(result: dict) -> str:
@@ -1438,6 +1686,19 @@ def get_json_report_path(report_path: str | None):
 
     json_path = Path(report_path).with_suffix(".json")
     return resolve_download_path(str(json_path))
+
+
+def add_report_json_to_result(result: dict, json_report_path: str | None) -> dict:
+    """Attach generated report JSON to the final Analyze result when available."""
+    if not json_report_path:
+        return result
+
+    try:
+        report_json = Path(json_report_path).read_text()
+    except OSError:
+        return result
+
+    return {**result, "report_json": report_json}
 
 
 def get_mp3_history_records() -> list[tuple]:
@@ -2025,6 +2286,7 @@ def run_pipeline(
     summary = result.get("summary") or "No summary was generated."
     report_path = result.get("report_path")
     json_report_path = get_json_report_path(report_path)
+    result = add_report_json_to_result(result, json_report_path)
 
     if result.get("supervisor_review_needed"):
         summary = f"{summary}\n\n**Supervisor review needed.**"
@@ -2052,7 +2314,7 @@ def run_pipeline(
 
 
 theme = gr.themes.Soft(
-    primary_hue="teal",
+    primary_hue="slate",
     neutral_hue="slate",
     radius_size="sm",
     font=[gr.themes.GoogleFont("Inter"), "Arial", "sans-serif"],
@@ -2156,13 +2418,17 @@ with gr.Blocks() as app:
                         with gr.Column(elem_classes=["workspace-main"]):
                             conversation_output = gr.HTML(
                                 value=format_conversation_html({}),
-                                label="Conversation",
+                                label="Speaker Transcript",
                             )
-                            transcript_output = gr.Textbox(
-                                label="Transcript",
-                                lines=10,
-                                elem_classes=["transcript-box"],
-                            )
+                            with gr.Column(elem_classes=["raw-transcript-panel"]):
+                                gr.HTML("<p class='raw-transcript-title'>Raw Transcript</p>")
+                                transcript_output = gr.Textbox(
+                                    label="Raw transcript text",
+                                    show_label=False,
+                                    placeholder="Raw transcript appears after analysis.",
+                                    lines=8,
+                                    elem_classes=["transcript-box"],
+                                )
                         with gr.Column(elem_classes=["workspace-side"]):
                             summary_output = gr.HTML(
                                 value=format_summary_html({}),
@@ -2231,13 +2497,17 @@ with gr.Blocks() as app:
                         with gr.Column(elem_classes=["workspace-main"]):
                             history_conversation_output = gr.HTML(
                                 value=format_conversation_html({}),
-                                label="Conversation",
+                                label="Speaker Transcript",
                             )
-                            history_transcript_output = gr.Textbox(
-                                label="Transcript",
-                                lines=10,
-                                elem_classes=["transcript-box"],
-                            )
+                            with gr.Column(elem_classes=["raw-transcript-panel"]):
+                                gr.HTML("<p class='raw-transcript-title'>Raw Transcript</p>")
+                                history_transcript_output = gr.Textbox(
+                                    label="Raw transcript text",
+                                    show_label=False,
+                                    placeholder="Raw transcript appears after loading analysis.",
+                                    lines=8,
+                                    elem_classes=["transcript-box"],
+                                )
                         with gr.Column(elem_classes=["workspace-side"]):
                             history_summary_output = gr.HTML(
                                 value=format_summary_html({}),

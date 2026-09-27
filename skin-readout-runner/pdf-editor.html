@@ -1,0 +1,2957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registry — PDF Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --field:#141A21; --chrome:#1D242C; --raised:#252F39; --rule:#333F4B; --rule-soft:#2A343E;
+  --text:#DDE4EA; --dim:#8998A6; --faint:#5E6C7A;
+  --cyan:#28B9CE; --cyan-dim:#17707E; --magenta:#E4477E; --amber:#EFA83C; --green:#4FBF87;
+  --paper:#FFFFFF;
+  --ui:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:'Space Grotesk',var(--ui);
+  --r:3px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--field);color:var(--text);font-family:var(--ui);font-size:13px;
+  overflow:hidden;-webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:inherit}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+
+/* ---------- shell ---------- */
+#app{display:grid;height:100%;grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr auto;
+  grid-template-areas:"bar bar bar" "pages field insp" "status status status"}
+#toolbar{grid-area:bar}
+#pagesPanel{grid-area:pages}
+#viewport{grid-area:field}
+#inspector{grid-area:insp}
+#statusbar{grid-area:status}
+
+/* ---------- toolbar ---------- */
+#toolbar{display:flex;align-items:center;gap:6px;padding:0 10px;height:50px;
+  background:var(--chrome);border-bottom:1px solid var(--rule);position:relative;z-index:40}
+.brand{display:flex;align-items:center;gap:9px;padding-right:12px;margin-right:4px;border-right:1px solid var(--rule)}
+.regmark{width:20px;height:20px;flex:none;opacity:.9}
+.brand b{font-family:var(--disp);font-weight:700;letter-spacing:-.02em;font-size:15px}
+.brand span{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+.tgroup{display:flex;gap:2px;padding:0 6px;border-right:1px solid var(--rule-soft);height:34px;align-items:center}
+.tgroup:last-of-type{border-right:0}
+.tool{width:34px;height:34px;display:grid;place-items:center;border-radius:var(--r);color:var(--dim);position:relative}
+.tool:hover{background:var(--raised);color:var(--text)}
+.tool[aria-pressed="true"]{background:var(--cyan-dim);color:#EAFBFF;box-shadow:inset 0 0 0 1px var(--cyan)}
+.tool:disabled{opacity:.3;cursor:not-allowed}
+.tool svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.btn{height:30px;padding:0 12px;border-radius:var(--r);background:var(--raised);color:var(--text);
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap;border:1px solid transparent}
+.btn:hover{background:#2E3A46}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.btn.primary{background:var(--cyan);color:#06222A;font-weight:600}
+.btn.primary:hover{background:#3FCFE3}
+.btn.ghost{background:none;border-color:var(--rule)}
+.btn.ghost:hover{background:var(--raised)}
+.spacer{flex:1}
+.tip{position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0B1014;color:var(--text);
+  padding:4px 8px;border-radius:var(--r);font-size:11px;white-space:nowrap;pointer-events:none;opacity:0;
+  transition:opacity .12s;border:1px solid var(--rule);z-index:60}
+.tip kbd{font-family:var(--mono);color:var(--faint);margin-left:5px}
+.tool:hover .tip,.btn:hover .tip{opacity:1}
+
+/* ---------- pages rail ---------- */
+#pagesPanel{width:172px;background:var(--chrome);border-right:1px solid var(--rule);display:flex;flex-direction:column;overflow:hidden}
+#pagesPanel.collapsed{width:0;border-right:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-bottom:1px solid var(--rule-soft);flex:none}
+.panel-head h2{margin:0;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600;font-family:var(--mono)}
+#thumbs{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:10px}
+.thumb{position:relative;cursor:pointer;border-radius:var(--r)}
+.thumb canvas{display:block;width:100%;background:var(--paper);border:1px solid var(--rule);border-radius:2px;
+  box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.thumb.active canvas{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+.thumb.dragging{opacity:.35}
+.thumb.dropbefore::before{content:"";position:absolute;left:0;right:0;top:-6px;height:2px;background:var(--cyan)}
+.thumb-n{position:absolute;bottom:4px;left:4px;background:rgba(10,14,18,.85);color:var(--text);
+  font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:2px}
+.thumb-acts{position:absolute;top:4px;right:4px;display:none;gap:2px}
+.thumb:hover .thumb-acts{display:flex}
+.thumb-acts button{width:20px;height:20px;display:grid;place-items:center;background:rgba(10,14,18,.9);
+  border-radius:2px;color:var(--dim)}
+.thumb-acts button:hover{color:var(--text);background:#2E3A46}
+.thumb-acts button.danger:hover{color:#fff;background:var(--magenta)}
+.thumb-acts svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.rail-foot{padding:8px;border-top:1px solid var(--rule-soft);display:flex;gap:6px;flex:none}
+.rail-foot .btn{flex:1;justify-content:center;height:28px;padding:0 6px;font-size:12px}
+
+/* ---------- viewport ---------- */
+#viewport{overflow:auto;position:relative;background:
+  linear-gradient(var(--field),var(--field)) padding-box;
+  scroll-behavior:auto}
+#doc{display:flex;flex-direction:column;align-items:center;gap:26px;padding:26px 26px 90px}
+#empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px}
+#empty .drop{max-width:430px}
+#empty h1{font-family:var(--disp);font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0 0 8px}
+#empty p{color:var(--dim);line-height:1.6;margin:0 0 20px}
+#empty .marks{display:flex;justify-content:center;gap:26px;margin-bottom:26px;opacity:.5}
+#viewport.dragover{box-shadow:inset 0 0 0 2px var(--cyan)}
+
+.page{position:relative;background:var(--paper);box-shadow:0 3px 22px rgba(0,0,0,.55);flex:none}
+.page.selected-page{outline:1px solid var(--cyan-dim);outline-offset:6px}
+.page canvas.render{display:block}
+.layer{position:absolute;inset:0}
+.l-edit{pointer-events:none;z-index:1}
+.l-text{z-index:2;pointer-events:none}
+.l-obj{z-index:3;pointer-events:none}
+.l-capture{z-index:4;display:none}
+body[data-tool="text"] .l-text{pointer-events:auto}
+body[data-tool="addtext"] .l-capture,body[data-tool="draw"] .l-capture,body[data-tool="mark"] .l-capture,
+body[data-tool="rect"] .l-capture,body[data-tool="ellipse"] .l-capture,body[data-tool="line"] .l-capture,
+body[data-tool="erase"] .l-capture,body[data-tool="place"] .l-capture{display:block}
+body[data-tool="addtext"] .l-capture,body[data-tool="place"] .l-capture{cursor:crosshair}
+body[data-tool="draw"] .l-capture,body[data-tool="mark"] .l-capture{cursor:crosshair}
+body[data-tool="rect"] .l-capture,body[data-tool="ellipse"] .l-capture,body[data-tool="line"] .l-capture,
+body[data-tool="erase"] .l-capture{cursor:crosshair}
+
+/* text lines */
+.tline{position:absolute;transform-origin:0 0;border-radius:2px;cursor:text}
+.tline:hover{background:rgba(40,185,206,.16);box-shadow:0 0 0 1px var(--cyan)}
+.tline.edited,.tline.hidden-src{background:transparent;box-shadow:none}
+.tedit{position:absolute;transform-origin:0 0;background:#fff;color:#000;border:0;padding:0;margin:0;
+  outline:2px solid var(--cyan);white-space:pre;overflow:visible;z-index:9;line-height:1;
+  box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.tedit:focus{outline:2px solid var(--cyan)}
+.tedit{pointer-events:auto}
+.repaint{position:absolute;pointer-events:none}
+.rtext{position:absolute;transform-origin:0 0;white-space:pre;line-height:1;pointer-events:none}
+
+/* objects */
+.obj{position:absolute;pointer-events:auto}
+.obj.selected{outline:1px solid var(--cyan);outline-offset:1px}
+.obj img{display:block;width:100%;height:100%;pointer-events:none}
+.obj .otext{white-space:pre;line-height:1.15;pointer-events:none;transform-origin:0 0}
+.obj svg{display:block;width:100%;height:100%;overflow:visible;pointer-events:none}
+.handle{position:absolute;width:9px;height:9px;background:var(--paper);border:1.5px solid var(--cyan);border-radius:1px;z-index:5}
+.handle.nw{left:-5px;top:-5px;cursor:nwse-resize} .handle.ne{right:-5px;top:-5px;cursor:nesw-resize}
+.handle.sw{left:-5px;bottom:-5px;cursor:nesw-resize} .handle.se{right:-5px;bottom:-5px;cursor:nwse-resize}
+.handle.rot{left:50%;top:-24px;margin-left:-5px;border-radius:50%;cursor:grab}
+.obj .del{position:absolute;right:-11px;top:-30px;width:22px;height:22px;display:grid;place-items:center;
+  background:var(--magenta);color:#fff;border-radius:2px;z-index:6}
+.obj .del svg{width:12px;height:12px;stroke:currentColor;stroke-width:2;fill:none}
+.marquee{position:absolute;border:1px solid var(--cyan);background:rgba(40,185,206,.13);pointer-events:none;z-index:8}
+
+/* ---------- inspector ---------- */
+#inspector{width:258px;background:var(--chrome);border-left:1px solid var(--rule);display:flex;flex-direction:column;overflow:hidden}
+#inspector.collapsed{width:0;border-left:0}
+#inspBody{flex:1;overflow-y:auto}
+.sect{border-bottom:1px solid var(--rule-soft);padding:12px}
+.sect h3{margin:0 0 10px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--faint);font-weight:500;display:flex;align-items:center;justify-content:space-between}
+.row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.row:last-child{margin-bottom:0}
+.row label{width:60px;flex:none;color:var(--dim);font-size:12px}
+.field{flex:1;display:flex;align-items:center;gap:6px;background:var(--field);border:1px solid var(--rule);
+  border-radius:var(--r);height:28px;padding:0 8px}
+.field:focus-within{border-color:var(--cyan)}
+.field input,.field select{flex:1;width:100%;background:none;border:0;color:var(--text);outline:none;min-width:0}
+.field select{cursor:pointer;margin-left:-3px}
+.field select option{background:var(--chrome)}
+.field .unit{color:var(--faint);font-family:var(--mono);font-size:11px}
+input[type=color]{width:28px;height:28px;padding:0;border:1px solid var(--rule);border-radius:var(--r);
+  background:var(--field);cursor:pointer;flex:none}
+input[type=range]{flex:1;accent-color:var(--cyan);background:none}
+.seg{display:flex;gap:2px;background:var(--field);padding:2px;border-radius:var(--r);border:1px solid var(--rule)}
+.seg button{flex:1;height:22px;border-radius:2px;color:var(--dim);display:grid;place-items:center;font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--cyan-dim);color:#EAFBFF}
+.seg button:hover{color:var(--text)}
+.chk{display:flex;align-items:center;gap:8px;color:var(--dim);cursor:pointer;margin-bottom:8px;font-size:12px}
+.chk input{accent-color:var(--cyan);width:14px;height:14px}
+.chk:hover{color:var(--text)}
+.readout{font-family:var(--mono);font-size:11px;color:var(--dim);background:var(--field);border:1px solid var(--rule-soft);
+  border-radius:var(--r);padding:8px;line-height:1.7;word-break:break-all}
+.readout b{color:var(--cyan);font-weight:500}
+.hint{color:var(--faint);font-size:11.5px;line-height:1.55;margin:0}
+.empty-insp{padding:26px 16px;text-align:center;color:var(--faint);font-size:12px;line-height:1.6}
+.fontrow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px dashed var(--rule-soft);font-size:11.5px}
+.fontrow:last-child{border:0}
+.fontrow .n{color:var(--text);font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fontrow .m{color:var(--faint);font-family:var(--mono);font-size:10px;flex:none}
+.stack{display:flex;flex-direction:column;gap:6px}
+.stack .btn{justify-content:center;height:29px}
+
+/* ---------- status ---------- */
+#statusbar{height:28px;background:var(--chrome);border-top:1px solid var(--rule);display:flex;align-items:center;
+  gap:0;padding:0 4px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.stat{padding:0 10px;border-right:1px solid var(--rule-soft);height:16px;display:flex;align-items:center;gap:6px}
+.stat b{color:var(--dim);font-weight:400}
+.stat.grow{flex:1;border-right:0;justify-content:flex-end}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.dot.on{background:var(--amber)}
+.zoomctl{display:flex;align-items:center;gap:1px}
+.zoomctl button{width:20px;height:18px;display:grid;place-items:center;color:var(--dim);border-radius:2px}
+.zoomctl button:hover{background:var(--raised);color:var(--text)}
+
+/* ---------- overlays ---------- */
+.scrim{position:fixed;inset:0;background:rgba(8,11,15,.72);display:grid;place-items:center;z-index:100;padding:20px}
+.scrim[hidden]{display:none}
+.modal{background:var(--chrome);border:1px solid var(--rule);border-radius:5px;width:min(560px,100%);
+  max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+.modal header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--rule)}
+.modal header h2{margin:0;font-family:var(--disp);font-size:15px;font-weight:500}
+.modal .body{padding:16px;overflow-y:auto}
+.modal footer{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--rule)}
+.tabs{display:flex;gap:2px;background:var(--field);padding:3px;border-radius:var(--r);margin-bottom:14px;border:1px solid var(--rule)}
+.tabs button{flex:1;height:28px;border-radius:2px;color:var(--dim)}
+.tabs button[aria-selected="true"]{background:var(--raised);color:var(--text)}
+#sigPad{width:100%;height:190px;background:var(--paper);border-radius:var(--r);touch-action:none;cursor:crosshair;display:block}
+.padwrap{position:relative}
+.padline{position:absolute;left:5%;right:5%;bottom:44px;border-bottom:1px dashed #C3CBD2;pointer-events:none}
+.padx{position:absolute;left:5%;bottom:36px;color:#9AA5AF;font-size:17px;pointer-events:none;font-family:var(--mono)}
+.sigtype{width:100%;height:110px;background:var(--paper);border-radius:var(--r);display:grid;place-items:center;color:#000;overflow:hidden}
+.scriptpick{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}
+.scriptpick button{border:1px solid var(--rule);border-radius:var(--r);padding:8px;background:var(--field);color:var(--text);font-size:19px;overflow:hidden;white-space:nowrap}
+.scriptpick button[aria-pressed="true"]{border-color:var(--cyan);background:var(--cyan-dim)}
+.textinput{width:100%;height:34px;background:var(--field);border:1px solid var(--rule);border-radius:var(--r);
+  color:var(--text);padding:0 10px;outline:none}
+.textinput:focus{border-color:var(--cyan)}
+.saved-sigs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.saved-sigs .s{position:relative;background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);
+  padding:4px;cursor:pointer;height:46px}
+.saved-sigs .s:hover{border-color:var(--cyan)}
+.saved-sigs img{height:36px;display:block}
+.dropzone{border:1px dashed var(--rule);border-radius:var(--r);padding:26px;text-align:center;color:var(--dim);cursor:pointer}
+.dropzone:hover{border-color:var(--cyan);color:var(--text)}
+
+/* find */
+#findPanel{position:fixed;top:60px;right:270px;width:308px;background:var(--chrome);border:1px solid var(--rule);
+  border-radius:5px;z-index:50;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+#findPanel[hidden]{display:none}
+#findPanel .body{padding:12px}
+.findhits{max-height:190px;overflow-y:auto;margin-top:10px;border-top:1px solid var(--rule-soft);padding-top:8px}
+.hit{padding:6px 8px;border-radius:var(--r);cursor:pointer;font-size:12px;color:var(--dim);
+  display:flex;gap:8px;align-items:baseline}
+.hit:hover{background:var(--raised);color:var(--text)}
+.hit .pg{font-family:var(--mono);font-size:10px;color:var(--faint);flex:none}
+.hit mark{background:rgba(239,168,60,.3);color:var(--amber);border-radius:2px}
+
+/* toast */
+#toasts{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;
+  gap:8px;z-index:200;align-items:center;pointer-events:none}
+.toast{background:#0D1318;border:1px solid var(--rule);border-left:2px solid var(--cyan);border-radius:var(--r);
+  padding:9px 14px;font-size:12.5px;box-shadow:0 8px 26px rgba(0,0,0,.5);animation:rise .18s ease-out}
+.toast.warn{border-left-color:var(--amber)} .toast.bad{border-left-color:var(--magenta)}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+#busy{position:fixed;inset:0;display:grid;place-items:center;background:rgba(8,11,15,.75);z-index:300;gap:14px}
+#busy[hidden]{display:none}
+.spin{width:34px;height:34px}
+.spin circle{fill:none;stroke:var(--cyan);stroke-width:2;stroke-dasharray:60 40;transform-origin:center;
+  animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#busyMsg{font-family:var(--mono);font-size:12px;color:var(--dim);text-align:center}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2F3A45;border-radius:6px;border:3px solid var(--field)}
+::-webkit-scrollbar-thumb:hover{background:#3D4A57}
+#pagesPanel ::-webkit-scrollbar-thumb,#inspector ::-webkit-scrollbar-thumb{border-color:var(--chrome)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+@media (max-width:1080px){#pagesPanel{width:0;border:0}#inspector{width:224px}}
+</style>
+</head>
+<body data-tool="select">
+<div id="app">
+
+  <div id="toolbar">
+    <div class="brand">
+      <svg class="regmark" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="7" fill="none" stroke="#28B9CE" stroke-width="1.4"/>
+        <circle cx="12" cy="12" r="2.6" fill="none" stroke="#E4477E" stroke-width="1.2"/>
+        <path d="M12 0v6M12 18v6M0 12h6M18 12h6" stroke="#8998A6" stroke-width="1.4"/>
+      </svg>
+      <div>
+        <b>Registry</b><br><span>PDF editor</span>
+      </div>
+    </div>
+
+    <div class="tgroup">
+      <button class="btn ghost" id="btnOpen"><svg viewBox="0 0 24 24"><path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-3H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1Z"/></svg>Open<span class="tip">Open a PDF<kbd>⌘O</kbd></span></button>
+      <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+    </div>
+
+    <div class="tgroup" id="toolCluster">
+      <button class="tool" data-tool="select" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="m5 3 14 8-6 1.6L10.6 19Z"/></svg><span class="tip">Select &amp; move<kbd>V</kbd></span></button>
+      <button class="tool" data-tool="text"><svg viewBox="0 0 24 24"><path d="M4 6V4h11v2M9.5 4v16M7 20h5"/><path d="M15 13h5M17.5 13v7M15.5 20h4"/></svg><span class="tip">Edit existing text<kbd>E</kbd></span></button>
+      <button class="tool" data-tool="addtext"><svg viewBox="0 0 24 24"><path d="M3 7V5h10v2M8 5v13M6 18h4"/><path d="M17 12v8M13 16h8"/></svg><span class="tip">Add a text box<kbd>T</kbd></span></button>
+      <button class="tool" data-tool="draw"><svg viewBox="0 0 24 24"><path d="M3 20s2.5-1 4-2.5c1.2-1.2.8-3-.3-3.4-1.4-.5-2.4 1.4-1 2.6 1.6 1.4 4 .8 6-1.4 2.3-2.6 3.6-6.3 6-8.3"/><path d="m14.5 12.5 6.2-6.2a1.6 1.6 0 0 0-2.3-2.3l-6.2 6.2"/></svg><span class="tip">Freehand pen<kbd>D</kbd></span></button>
+      <button class="tool" data-tool="mark"><svg viewBox="0 0 24 24"><path d="m14 4 6 6-8 8H8l-2-2Z"/><path d="M4 21h16"/></svg><span class="tip">Highlighter<kbd>H</kbd></span></button>
+      <button class="tool" data-tool="rect"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/></svg><span class="tip">Rectangle<kbd>R</kbd></span></button>
+      <button class="tool" data-tool="ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/></svg><span class="tip">Ellipse<kbd>O</kbd></span></button>
+      <button class="tool" data-tool="line"><svg viewBox="0 0 24 24"><path d="M4 19 20 5"/><circle cx="4" cy="19" r="1.6"/><circle cx="20" cy="5" r="1.6"/></svg><span class="tip">Line<kbd>L</kbd></span></button>
+      <button class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5v-3.1c0-.4.15-.78.44-1.06L14 5l5 5-9.5 9.5c-.3.3-.7.5-1.1.5Z"/><path d="M11 8.5 15.5 13M9 20h11"/></svg><span class="tip">Whiteout / redact<kbd>X</kbd></span></button>
+    </div>
+
+    <div class="tgroup">
+      <button class="tool" id="btnSign"><svg viewBox="0 0 24 24"><path d="M3 17c3 0 3.5-9 6-9s1.5 9 4 9 3-4 5-4 3 2 3 2"/><path d="M3 21h18"/></svg><span class="tip">Signature<kbd>S</kbd></span></button>
+      <button class="tool" id="btnImage"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 4 3.5 3-2.5 4 3.5"/></svg><span class="tip">Insert image</span></button>
+      <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp" hidden>
+      <button class="tool" id="btnFind"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg><span class="tip">Find &amp; replace<kbd>⌘F</kbd></span></button>
+    </div>
+
+    <div class="tgroup">
+      <button class="tool" id="btnUndo" disabled><svg viewBox="0 0 24 24"><path d="M4 9h11a5 5 0 0 1 0 10h-4"/><path d="m8 5-4 4 4 4"/></svg><span class="tip">Undo<kbd>⌘Z</kbd></span></button>
+      <button class="tool" id="btnRedo" disabled><svg viewBox="0 0 24 24"><path d="M20 9H9a5 5 0 0 0 0 10h4"/><path d="m16 5 4 4-4 4"/></svg><span class="tip">Redo<kbd>⇧⌘Z</kbd></span></button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <button class="btn ghost" id="btnPages"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="17" rx="1"/><path d="M14 4h6M14 9h6M14 14h6M14 19h6"/></svg>Pages<span class="tip">Toggle page rail</span></button>
+    <button class="btn ghost" id="btnExportFlat" disabled><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>Flattened<span class="tip">Download image-based PDF</span></button>
+    <button class="btn primary" id="btnExport" disabled><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>Download PDF<span class="tip">Export edited file<kbd>⌘S</kbd></span></button>
+  </div>
+
+  <aside id="pagesPanel">
+    <div class="panel-head"><h2>Pages</h2><span id="pgCount" style="font-family:var(--mono);font-size:10px;color:var(--faint)">0</span></div>
+    <div id="thumbs"></div>
+    <div class="rail-foot">
+      <button class="btn ghost" id="btnBlank" disabled>+ Blank</button>
+      <button class="btn ghost" id="btnMerge" disabled>Merge…</button>
+      <input type="file" id="mergeInput" accept="application/pdf,.pdf" hidden>
+    </div>
+  </aside>
+
+  <main id="viewport">
+    <div id="doc"></div>
+    <div id="empty">
+      <div class="drop">
+        <div class="marks">
+          <svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="#28B9CE" stroke-width="1.2"/><path d="M12 1v7M12 16v7M1 12h7M16 12h7" stroke="#5E6C7A" stroke-width="1.2"/></svg>
+          <svg width="26" height="26" viewBox="0 0 24 24"><path d="M2 2h6M2 2v6" stroke="#5E6C7A" stroke-width="1.2" fill="none"/><path d="M22 22h-6M22 22v-6" stroke="#5E6C7A" stroke-width="1.2" fill="none"/><rect x="7" y="7" width="10" height="10" fill="none" stroke="#E4477E" stroke-width="1.2"/></svg>
+          <svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="#EFA83C" stroke-width="1.2"/><circle cx="12" cy="12" r="2" fill="none" stroke="#5E6C7A" stroke-width="1.2"/></svg>
+        </div>
+        <h1>Open a PDF to start editing</h1>
+        <p>Drop a file anywhere in this pane, or choose one. Registry reads the real text runs out of the file, matches each font, and writes your changes back into the page.</p>
+        <button class="btn primary" id="btnOpen2" style="height:36px;padding:0 18px">Choose a PDF</button>
+      </div>
+    </div>
+
+    <div id="findPanel" hidden>
+      <div class="panel-head"><h2>Find &amp; replace</h2><button class="tool" id="findClose" style="width:22px;height:22px"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+      <div class="body">
+        <div class="row"><div class="field"><input id="findQ" placeholder="Find in document" autocomplete="off"></div></div>
+        <div class="row"><div class="field"><input id="findR" placeholder="Replace with" autocomplete="off"></div></div>
+        <label class="chk"><input type="checkbox" id="findCase"> Match case</label>
+        <div class="row" style="gap:6px">
+          <button class="btn ghost" id="findAll" style="flex:1;justify-content:center">Find all</button>
+          <button class="btn primary" id="replaceAll" style="flex:1;justify-content:center">Replace all</button>
+        </div>
+        <div class="findhits" id="findHits"></div>
+      </div>
+    </div>
+  </main>
+
+  <aside id="inspector">
+    <div class="panel-head"><h2 id="inspTitle">Inspector</h2></div>
+    <div id="inspBody"></div>
+  </aside>
+
+  <div id="statusbar">
+    <div class="stat"><span class="dot" id="editDot"></span><b id="statEdits">No edits</b></div>
+    <div class="stat">Page <b id="statPage">–</b> / <b id="statPages">–</b></div>
+    <div class="stat" id="statSize">–</div>
+    <div class="stat" id="statXY">x —  y —</div>
+    <div class="stat grow">
+      <span id="statTool">Select</span>
+      <div class="zoomctl" style="margin-left:12px">
+        <button id="zOut"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+        <span id="statZoom" style="width:44px;text-align:center;color:var(--dim)">100%</span>
+        <button id="zIn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button id="zFit" title="Fit width" style="width:auto;padding:0 6px;font-family:var(--mono);font-size:10px">FIT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- signature modal -->
+<div class="scrim" id="sigModal" hidden>
+  <div class="modal" role="dialog" aria-label="Create signature">
+    <header>
+      <h2>Signature</h2>
+      <button class="tool" id="sigClose" style="width:26px;height:26px"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </header>
+    <div class="body">
+      <div class="tabs" id="sigTabs">
+        <button data-tab="draw" aria-selected="true">Draw</button>
+        <button data-tab="type" aria-selected="false">Type</button>
+        <button data-tab="upload" aria-selected="false">Upload</button>
+      </div>
+
+      <div data-pane="draw">
+        <div class="padwrap">
+          <canvas id="sigPad"></canvas>
+          <div class="padline"></div><div class="padx">✕</div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label>Ink</label>
+          <input type="color" id="sigColor" value="#1B3A6B">
+          <div class="field"><span class="unit">WEIGHT</span><input type="range" id="sigWeight" min="1" max="6" step="0.5" value="2.6"></div>
+          <button class="btn ghost" id="sigClear">Clear</button>
+        </div>
+      </div>
+
+      <div data-pane="type" hidden>
+        <input class="textinput" id="sigName" placeholder="Type your name" autocomplete="off">
+        <div class="sigtype" id="sigPreview" style="margin-top:10px"></div>
+        <div class="scriptpick" id="sigFonts"></div>
+      </div>
+
+      <div data-pane="upload" hidden>
+        <div class="dropzone" id="sigDrop">
+          Click to choose a photo or scan of your signature<br>
+          <span style="font-size:11px;color:var(--faint)">PNG or JPG · the white background is removed automatically</span>
+        </div>
+        <input type="file" id="sigFile" accept="image/*" hidden>
+        <div class="sigtype" id="sigUpPreview" style="margin-top:12px;display:none"></div>
+      </div>
+
+      <div id="savedWrap" style="margin-top:14px;display:none">
+        <h3 style="margin:0 0 6px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:500">Saved this session</h3>
+        <div class="saved-sigs" id="savedSigs"></div>
+      </div>
+    </div>
+    <footer>
+      <button class="btn ghost" id="sigCancel">Cancel</button>
+      <button class="btn primary" id="sigPlace">Place on page</button>
+    </footer>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="busy" hidden>
+  <svg class="spin" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15"/></svg>
+  <div id="busyMsg">Working…</div>
+</div>
+
+<script>
+/* =====================================================================
+   Registry — a browser-native PDF editor
+   Reads real text runs out of the file, matches their fonts, and writes
+   changes back with pdf-lib. No server, no upload.
+   ===================================================================== */
+(function () {
+"use strict";
+
+/* ---------- 1. dependencies (with CDN fallbacks) ---------- */
+const SOURCES = {
+  pdfjs: [
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+    "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js",
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"
+  ],
+  worker: [
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
+    "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js",
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js"
+  ],
+  pdflib: [
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js",
+    "https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js",
+    "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"
+  ],
+  fontkit: [
+    "https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js",
+    "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"
+  ]
+};
+
+function loadScript(url) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = url; s.async = true;
+    s.onload = () => res(url);
+    s.onerror = () => rej(new Error("failed " + url));
+    document.head.appendChild(s);
+  });
+}
+async function loadFirst(urls, testGlobal) {
+  for (const u of urls) {
+    try { await loadScript(u); if (!testGlobal || window[testGlobal]) return u; }
+    catch (e) { /* try next mirror */ }
+  }
+  throw new Error("Could not load " + testGlobal);
+}
+
+/* ---------- 2. state ---------- */
+const S = {
+  fileName: "document.pdf",
+  srcBytes: null,          // Uint8Array of the file as opened
+  pdf: null,               // pdf.js document
+  pageList: [],            // [{key,kind,src,rotate,w,h}]  — order/rotation live here
+  views: [],               // parallel render state
+  scale: 1,
+  dpr: Math.min(window.devicePixelRatio || 1, 2),
+  tool: "select",
+  objects: [],             // added content
+  edits: {},               // lineUid -> {text, style, deleted, fit}
+  fonts: {},               // detected font -> {count,size}
+  customFonts: {},         // label -> Uint8Array
+  sel: null,               // selected object id
+  selLine: null,           // selected line uid
+  pending: null,           // object waiting to be placed (signature/image)
+  history: [], hi: -1,
+  sigs: [],
+  keyCounter: 0, objCounter: 0,
+  fontkitReady: false,
+  defaults: {
+    size: 12, fam: "Helvetica", bold: false, italic: false, color: "#111111",
+    inkColor: "#1B3A6B", inkWidth: 2.4,
+    markColor: "#F4E04D", markWidth: 14,
+    shapeStroke: "#D8385C", shapeFill: "none", shapeWidth: 1.6,
+    eraseColor: "#FFFFFF", autoBg: true, fitWidth: false, strip: true, flatten: false
+  }
+};
+window.__registry = S; // handy for debugging in devtools
+
+/* ---------- 3. tiny helpers ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const uid = (p) => p + (++S.objCounter) + "_" + Math.random().toString(36).slice(2, 6);
+
+function hexToRgb01(hex) {
+  const h = String(hex || "#000").replace("#", "");
+  const f = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const n = parseInt(f, 16);
+  return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
+}
+function rgbToHex(r, g, b) {
+  return "#" + [r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0")).join("");
+}
+function pdfColor(hex) { const c = hexToRgb01(hex); return PDFLib.rgb(c.r, c.g, c.b); }
+
+function toast(msg, kind) {
+  const t = el("div", "toast" + (kind ? " " + kind : ""), msg);
+  $("#toasts").appendChild(t);
+  setTimeout(() => { t.style.transition = "opacity .25s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 260); }, kind === "bad" ? 5200 : 2900);
+}
+let busyDepth = 0;
+function busyMsg(m) { $("#busyMsg").textContent = m; }
+function busy(on, msg) {
+  busyDepth = Math.max(0, busyDepth + (on ? 1 : -1));
+  $("#busy").hidden = busyDepth === 0;
+  if (msg) $("#busyMsg").textContent = msg;
+}
+function ic(path, sw) {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (sw || 1.7) + '" stroke-linecap="round" stroke-linejoin="round">' + path + "</svg>";
+}
+
+/* ---------- 4. font intelligence ---------- */
+/* Strip the subset tag PDFs prepend to embedded fonts: "QKZWAB+Arial-Bold". */
+function cleanFontName(n) {
+  if (!n) return "";
+  return String(n).replace(/^[A-Z]{6}\+/, "").replace(/[_-]?(MT|PS|Std|Pro)$/i, "").trim();
+}
+/* Decide which of the 14 built-in PDF faces best stands in for a font. */
+function classifyFont(name, cssFamily) {
+  const n = ((name || "") + " " + (cssFamily || "")).toLowerCase();
+  const bold = /bold|black|heavy|semib|demib|extrab|ultrab|[-_ ,]bd\b|\b(70|80|90)0\b/.test(n);
+  const italic = /italic|oblique|slant|[-_ ,]it\b/.test(n);
+  let fam = "Helvetica";
+  const mono = /courier|mono|consol|menlo|typewriter|inconsolat|code/.test(n);
+  const serif = /times|georgia|garamond|minion|cambria|roman|palatino|caslon|baskerv|didot|utopia|century|book(man|antiqua)?|charter|constantia|merriweather|\bserif\b/.test(n) && !/sans/.test(n);
+  if (mono) fam = "Courier"; else if (serif) fam = "Times";
+  return { fam, bold, italic };
+}
+function stdFont(fam, bold, italic) {
+  const F = PDFLib.StandardFonts;
+  if (fam === "Times") return bold && italic ? F.TimesRomanBoldItalic : bold ? F.TimesRomanBold : italic ? F.TimesRomanItalic : F.TimesRoman;
+  if (fam === "Courier") return bold && italic ? F.CourierBoldOblique : bold ? F.CourierBold : italic ? F.CourierOblique : F.Courier;
+  return bold && italic ? F.HelveticaBoldOblique : bold ? F.HelveticaBold : italic ? F.HelveticaOblique : F.Helvetica;
+}
+function cssStack(fam, cssFamily) {
+  if (cssFamily) return String(cssFamily) + ", " + cssStack(fam);
+  if (String(fam).indexOf("custom:") === 0) {
+    const cf = S.customFonts[fam.slice(7)];
+    return cf ? '"' + cf.family + '", Helvetica, Arial, sans-serif' : "Helvetica, Arial, sans-serif";
+  }
+  if (fam === "Times") return '"Times New Roman", Times, "Liberation Serif", serif';
+  if (fam === "Courier") return '"Courier New", Courier, "Liberation Mono", monospace';
+  return 'Helvetica, Arial, "Liberation Sans", sans-serif';
+}
+/* The built-in faces only speak WinAnsi. Fold the common typographic
+   characters down instead of letting the export blow up. */
+const WINANSI_EXTRA = new Set([0x20AC, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6,
+  0x2030, 0x0160, 0x2039, 0x0152, 0x017D, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+  0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x017E, 0x0178]);
+const WINANSI_FOLD = {
+  "\u00A0": " ", "\u2009": " ", "\u202F": " ", "\u2212": "-", "\u2010": "-", "\u2011": "-",
+  "\u200B": "", "\u00AD": "", "\u2044": "/", "\t": "    ",
+  "\uFB00": "ff", "\uFB01": "fi", "\uFB02": "fl", "\uFB03": "ffi", "\uFB04": "ffl"
+};
+function foldForStandard(text) {
+  let out = "", dropped = 0;
+  for (const ch of String(text)) {
+    if (WINANSI_FOLD[ch] !== undefined) { out += WINANSI_FOLD[ch]; continue; }
+    const c = ch.codePointAt(0);
+    if (c === 10 || c === 13 || (c >= 32 && c <= 126) || (c >= 160 && c <= 255) || WINANSI_EXTRA.has(c)) out += ch;
+    else { out += "?"; dropped++; }
+  }
+  return { text: out, dropped };
+}
+
+/* ---------- 5. pixel sampling: read colour straight off the rendering ---------- */
+/* Text colour in a PDF lives in the content stream, not in the text layer,
+   so we read it back off the raster: the ink is whatever is furthest from
+   the page behind it. */
+function sampleRegion(view, ux, uy, uw, uh) {
+  const cv = view.canvas;
+  if (!cv || !view.rendered) return null;
+  const k = cv.width / (view.w1 * S.scale);        // canvas px per css px
+  const s = S.scale * k;                            // canvas px per unit
+  const x0 = clamp(Math.floor(ux * s), 0, cv.width - 1);
+  const y0 = clamp(Math.floor(uy * s), 0, cv.height - 1);
+  const w = clamp(Math.ceil(uw * s), 1, cv.width - x0);
+  const h = clamp(Math.ceil(uh * s), 1, cv.height - y0);
+  let d;
+  try { d = cv.getContext("2d", { willReadFrequently: true }).getImageData(x0, y0, w, h).data; }
+  catch (e) { return null; }
+
+  const bins = new Map();
+  for (let i = 0; i < d.length; i += 4) {
+    const key = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+    const b = bins.get(key);
+    if (b) { b.n++; b.r += d[i]; b.g += d[i + 1]; b.b += d[i + 2]; }
+    else bins.set(key, { n: 1, r: d[i], g: d[i + 1], b: d[i + 2] });
+  }
+  let bg = null;
+  for (const b of bins.values()) if (!bg || b.n > bg.n) bg = b;
+  const bgc = { r: bg.r / bg.n, g: bg.g / bg.n, b: bg.b / bg.n };
+
+  // ink = mean of the pixels furthest from the background
+  let best = null, bestD = -1;
+  const dist = (b) => Math.abs(b.r / b.n - bgc.r) + Math.abs(b.g / b.n - bgc.g) + Math.abs(b.b / b.n - bgc.b);
+  for (const b of bins.values()) {
+    const dd = dist(b);
+    if (b.n < 2) continue;
+    if (dd > bestD) { bestD = dd; best = b; }
+  }
+  const ink = best && bestD > 26 ? { r: best.r / best.n, g: best.g / best.n, b: best.b / best.n } : { r: 17, g: 17, b: 17 };
+  return { bg: rgbToHex(bgc.r, bgc.g, bgc.b), ink: rgbToHex(ink.r, ink.g, ink.b), confident: bestD > 26 };
+}
+
+/* ---------- 6. opening a document ---------- */
+async function openFile(file) {
+  if (!file) return;
+  busy(true, "Reading " + file.name);
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    S.fileName = file.name.replace(/\.pdf$/i, "") || "document";
+    await loadDocument(buf);
+    toast("Opened " + file.name);
+  } catch (e) {
+    console.error(e);
+    toast("Could not open that file. " + (e && e.message ? e.message : ""), "bad");
+  } finally { busy(false); }
+}
+
+async function loadDocument(bytes) {
+  S.srcBytes = bytes;
+  // pdf.js takes ownership of the buffer it is given, so hand it a copy
+  S.pdf = await pdfjsLib.getDocument({ data: bytes.slice(0), useSystemFonts: true }).promise;
+  S.pageList = [];
+  S.objects = []; S.edits = {}; S.fonts = {}; S.sel = null; S.selLine = null;
+  S.history = []; S.hi = -1;
+  for (let i = 0; i < S.pdf.numPages; i++) {
+    const pg = await S.pdf.getPage(i + 1);
+    const vp = pg.getViewport({ scale: 1, rotation: 0 });
+    S.pageList.push({ key: "k" + (++S.keyCounter), kind: "orig", src: i, rotate: pg.rotate || 0, w: vp.width, h: vp.height });
+  }
+  $("#empty").style.display = "none";
+  $("#btnExport").disabled = false;
+  $("#btnExportFlat").disabled = false;
+  $("#btnBlank").disabled = false;
+  $("#btnMerge").disabled = false;
+  fitWidth(true);
+  await buildPages();
+  snapshot();
+  status();
+}
+
+/* ---------- 7. laying out the pages ---------- */
+let observer = null;
+async function buildPages() {
+  const doc = $("#doc");
+  doc.innerHTML = "";
+  S.views = [];
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      const i = Number(e.target.dataset.i);
+      if (e.isIntersecting) renderPage(i);
+    }
+  }, { root: $("#viewport"), rootMargin: "700px 0px" });
+
+  for (let i = 0; i < S.pageList.length; i++) {
+    const p = S.pageList[i];
+    const rot = ((p.rotate % 360) + 360) % 360;
+    const swap = rot === 90 || rot === 270;
+    const w1 = swap ? p.h : p.w, h1 = swap ? p.w : p.h;
+
+    const node = el("div", "page");
+    node.dataset.i = i;
+    node.style.width = Math.round(w1 * S.scale) + "px";
+    node.style.height = Math.round(h1 * S.scale) + "px";
+
+    const canvas = el("canvas", "render");
+    canvas.style.width = "100%"; canvas.style.height = "100%";
+    const lEdit = el("div", "layer l-edit");
+    const lText = el("div", "layer l-text");
+    const lObj = el("div", "layer l-obj");
+    const lCap = el("div", "layer l-capture");
+    node.append(canvas, lEdit, lText, lObj, lCap);
+    doc.appendChild(node);
+
+    S.views.push({
+      i, key: p.key, node, canvas, lEdit, lText, lObj, lCap,
+      w1, h1, rot, vp1: null, lines: null, rendered: false, rendering: false, task: null
+    });
+    observer.observe(node);
+  }
+  buildThumbs();
+  drawAllOverlays();
+  status();
+}
+
+async function renderPage(i, force) {
+  const v = S.views[i]; if (!v) return;
+  if (v.rendering) return;
+  if (v.rendered && !force) return;
+  const p = S.pageList[i];
+  v.rendering = true;
+  try {
+    const cssW = v.w1 * S.scale, cssH = v.h1 * S.scale;
+    const k = S.dpr;
+    v.canvas.width = Math.max(1, Math.round(cssW * k));
+    v.canvas.height = Math.max(1, Math.round(cssH * k));
+    const ctx = v.canvas.getContext("2d", { willReadFrequently: true });
+
+    if (p.kind === "blank") {
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, v.canvas.width, v.canvas.height);
+      v.vp1 = blankViewport(v.w1, v.h1);
+      v.lines = [];
+    } else {
+      const page = await S.pdf.getPage(p.src + 1);
+      v.vp1 = page.getViewport({ scale: 1, rotation: v.rot });
+      const vp = page.getViewport({ scale: S.scale * k, rotation: v.rot });
+      if (v.task) { try { v.task.cancel(); } catch (e) {} }
+      v.task = page.render({ canvasContext: ctx, viewport: vp });
+      await v.task.promise;
+      v.task = null;
+      if (!v.lines) v.lines = await extractLines(page, v);
+    }
+    v.rendered = true;
+  } catch (e) {
+    if (!/cancel/i.test(String(e && e.message))) console.warn("render", i, e);
+  } finally {
+    v.rendering = false;
+  }
+  drawOverlay(i);
+  const focus = document.activeElement;
+  if (!S.sel && !S.selLine && !(focus && focus.closest && focus.closest("#inspector"))) updateInspector();
+}
+
+/* A stand-in viewport for pages we created ourselves. */
+function blankViewport(w, h) {
+  return {
+    scale: 1, width: w, height: h,
+    convertToPdfPoint: (x, y) => [x, h - y],
+    convertToViewportPoint: (x, y) => [x, h - y]
+  };
+}
+
+function invalidate(hard) {
+  for (const v of S.views) { v.rendered = false; if (hard) v.lines = null; }
+  const vpEl = $("#viewport");
+  const anchorTop = vpEl.scrollTop;
+  for (let i = 0; i < S.views.length; i++) {
+    const v = S.views[i];
+    v.node.style.width = Math.round(v.w1 * S.scale) + "px";
+    v.node.style.height = Math.round(v.h1 * S.scale) + "px";
+  }
+  vpEl.scrollTop = anchorTop;
+  for (let i = 0; i < S.views.length; i++) {
+    const r = S.views[i].node.getBoundingClientRect();
+    if (r.bottom > -800 && r.top < window.innerHeight + 800) renderPage(i, true);
+  }
+  drawAllOverlays();
+}
+
+/* ---------- 8. zoom ---------- */
+function setZoom(z, silent) {
+  const vpEl = $("#viewport");
+  const mid = vpEl.scrollTop + vpEl.clientHeight / 2;
+  const ratio = z / S.scale;
+  S.scale = clamp(z, 0.2, 5);
+  invalidate(false);
+  vpEl.scrollTop = mid * ratio - vpEl.clientHeight / 2;
+  $("#statZoom").textContent = Math.round(S.scale * 100) + "%";
+  if (!silent) status();
+}
+function fitWidth(silent) {
+  if (!S.pageList.length) return;
+  const p = S.pageList[0];
+  const rot = ((p.rotate % 360) + 360) % 360;
+  const w1 = (rot === 90 || rot === 270) ? p.h : p.w;
+  const avail = $("#viewport").clientWidth - 56;
+  S.scale = clamp(avail / w1, 0.2, 3);
+  $("#statZoom").textContent = Math.round(S.scale * 100) + "%";
+  if (!silent) invalidate(false);
+}
+
+/* ---------- 9. page thumbnails ---------- */
+async function buildThumbs() {
+  const wrap = $("#thumbs");
+  wrap.innerHTML = "";
+  $("#pgCount").textContent = S.pageList.length;
+  for (let i = 0; i < S.pageList.length; i++) {
+    const p = S.pageList[i];
+    const t = el("div", "thumb");
+    t.dataset.i = i;
+    t.draggable = true;
+    const c = el("canvas");
+    const rot = ((p.rotate % 360) + 360) % 360, swap = rot === 90 || rot === 270;
+    const w1 = swap ? p.h : p.w, h1 = swap ? p.w : p.h;
+    const tw = 148, th = Math.round(tw * h1 / w1);
+    c.width = tw; c.height = th; c.style.aspectRatio = w1 + "/" + h1;
+    t.appendChild(c);
+    t.appendChild(el("div", "thumb-n", String(i + 1)));
+    const acts = el("div", "thumb-acts");
+    acts.innerHTML =
+      '<button data-a="rot" title="Rotate 90°">' + ic('<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>', 2) + "</button>" +
+      '<button data-a="dup" title="Duplicate">' + ic('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', 2) + "</button>" +
+      '<button data-a="del" class="danger" title="Delete page">' + ic('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>', 2) + "</button>";
+    t.appendChild(acts);
+    wrap.appendChild(t);
+    paintThumb(i, c);
+  }
+  markActiveThumb();
+}
+async function paintThumb(i, c) {
+  const p = S.pageList[i];
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  if (p.kind === "blank") return;
+  try {
+    const page = await S.pdf.getPage(p.src + 1);
+    const rot = ((p.rotate % 360) + 360) % 360;
+    const base = page.getViewport({ scale: 1, rotation: rot });
+    const vp = page.getViewport({ scale: c.width / base.width, rotation: rot });
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  } catch (e) { /* thumbnail is cosmetic */ }
+}
+function markActiveThumb() {
+  const cur = currentPageIndex();
+  $$("#thumbs .thumb").forEach((t, i) => t.classList.toggle("active", i === cur));
+}
+function currentPageIndex() {
+  const vpEl = $("#viewport");
+  const mid = vpEl.getBoundingClientRect().top + vpEl.clientHeight * 0.35;
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < S.views.length; i++) {
+    const r = S.views[i].node.getBoundingClientRect();
+    const d = Math.abs(r.top - mid);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+/* ---------- 10. reading the text out of a page ---------- */
+/* pdf.js only exposes the true PostScript name once the page's operators
+   have been walked, so extractLines forces that first. */
+function realFontName(page, key, styles) {
+  try {
+    if (page.commonObjs && page.commonObjs.has(key)) {
+      const o = page.commonObjs.get(key);
+      const n = o && (o.name || o.loadedName || o.fallbackName);
+      if (n && !/^g_d\d+_f\d+$/.test(n)) return { name: cleanFontName(n), bold: !!o.bold, italic: !!o.italic };
+    }
+  } catch (e) { /* font object not resolved */ }
+  const st = styles && styles[key];
+  return { name: cleanFontName((st && st.fontFamily) || key), bold: false, italic: false };
+}
+
+async function extractLines(page, view) {
+  try { await page.getOperatorList(); } catch (e) { /* names degrade gracefully */ }
+  const tc = await page.getTextContent();
+  const vp1 = view.vp1;
+  const raw = [];
+  for (const it of tc.items) {
+    if (!it.str || !it.str.length) continue;
+    const tx = pdfjsLib.Util.transform(vp1.transform, it.transform);
+    const fh = Math.hypot(tx[2], tx[3]);
+    if (!(fh > 0.4)) continue;
+    const st = tc.styles && tc.styles[it.fontName];
+    let asc = st && typeof st.ascent === "number" && st.ascent > 0.2 && st.ascent < 1.4 ? st.ascent : 0.78;
+    const info = realFontName(page, it.fontName, tc.styles);
+    const name = info.name;
+    if (it.str.trim()) {
+      const f = S.fonts[name] || (S.fonts[name] = { count: 0, size: 0 });
+      f.count++; f.size = Math.round(fh * 10) / 10;
+    }
+    raw.push({
+      str: it.str, x: tx[4], base: tx[5], fh, asc, blank: !it.str.trim(),
+      w: it.width * vp1.scale, angle: Math.atan2(tx[1], tx[0]),
+      font: name, hintB: info.bold, hintI: info.italic, css: (st && st.fontFamily) || ""
+    });
+  }
+  raw.sort((a, b) => (a.base - b.base) || (a.x - b.x));
+
+  const lines = [];
+  let cur = null;
+  for (const it of raw) {
+    /* pdf.js synthesises a blank run to span the gap between two columns.
+       A narrow one is a real space; a wide one is layout padding and must
+       not glue the columns together. */
+    if (it.blank) {
+      if (cur && it.w <= cur.fh * 0.9 && !/\s$/.test(cur.str)) {
+        cur.str += " ";
+        cur.right = Math.max(cur.right, it.x + it.w);
+      }
+      continue;
+    }
+    const gap = cur ? it.x - cur.right : 0;
+    const sameStyle = cur && cur.runs.length &&
+      cleanFontName(it.font) === cleanFontName(cur.runs[cur.runs.length - 1].font) &&
+      Math.abs(it.fh - cur.fh) <= Math.max(0.8, cur.fh * 0.12);
+    const fits = cur &&
+      sameStyle &&
+      Math.abs(it.base - cur.base) <= Math.max(1.2, cur.fh * 0.22) &&
+      Math.abs(it.angle - cur.angle) < 0.02 &&
+      it.x >= cur.right - cur.fh * 0.35 &&
+      gap <= Math.max(4, cur.fh * 0.85);
+    if (!fits) {
+      if (cur && cur.str.trim()) lines.push(cur);
+      cur = {
+        uid: view.key + "-l" + lines.length, page: view.i, str: "", x: it.x, base: it.base,
+        fh: it.fh, asc: it.asc, angle: it.angle, right: it.x, runs: []
+      };
+    }
+    if (cur.str && gap > cur.fh * 0.2 && !/\s$/.test(cur.str) && !/^\s/.test(it.str)) cur.str += " ";
+    cur.str += it.str;
+    cur.runs.push(it);
+    cur.right = Math.max(cur.right, it.x + it.w);
+    cur.base = (cur.base * (cur.runs.length - 1) + it.base) / cur.runs.length;
+  }
+  if (cur && cur.str.trim()) lines.push(cur);
+
+  for (const L of lines) {
+    L.uid = view.key + "-l" + lines.indexOf(L);
+    L.w = Math.max(2, L.right - L.x);
+    // the dominant run decides which face we imitate
+    const tally = {};
+    let bestRun = L.runs[0];
+    for (const r of L.runs) {
+      tally[r.font] = (tally[r.font] || 0) + r.str.length;
+      if (r.str.trim().length > (bestRun.str.trim().length || 0)) bestRun = r;
+    }
+    L.font = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0] || bestRun.font;
+    L.css = bestRun.css;
+    const cl = classifyFont(L.font, L.css);
+    L.fam = cl.fam;
+    L.bold = cl.bold || !!bestRun.hintB;
+    L.italic = cl.italic || !!bestRun.hintI;
+    L.fh = bestRun.fh;
+    L.asc = bestRun.asc;
+    L.size = Math.round(bestRun.fh * 100) / 100;
+    L.top = L.base - L.asc * L.fh;
+    L.h = L.fh * 1.16;
+  }
+  return lines;
+}
+
+/* ---------- 11. measuring, so the preview matches the export ---------- */
+const measureCanvas = document.createElement("canvas").getContext("2d");
+function measure(text, fam, bold, italic, sizePx, cssFamily) {
+  measureCanvas.font = fontCss({ fam, bold, italic, css: cssFamily }, sizePx);
+  const m = measureCanvas.measureText(text || " ");
+  const asc = m.fontBoundingBoxAscent || m.actualBoundingBoxAscent || sizePx * 0.8;
+  const desc = m.fontBoundingBoxDescent || m.actualBoundingBoxDescent || sizePx * 0.2;
+  return { w: m.width, asc, desc };
+}
+function fontCss(st, sizePx) {
+  return (st.italic ? "italic " : "") + (st.bold ? "700 " : "400 ") + sizePx + "px " + cssStack(st.fam, st.css);
+}
+function textCanvas(text, st, sizePx, color, trackPx) {
+  const m = measure(text || " ", st.fam, st.bold, st.italic, sizePx, st.css);
+  const dpr = S.dpr || 1;
+  const pad = 3;
+  const extra = text && text.length > 1 ? Math.max(0, Math.abs(trackPx || 0) * (text.length - 1)) : 0;
+  const w = Math.max(1, Math.ceil(m.w + extra + pad * 2));
+  const h = Math.max(1, Math.ceil(m.asc + m.desc + pad * 2));
+  const c = document.createElement("canvas");
+  c.className = "rtext";
+  c.width = Math.ceil(w * dpr);
+  c.height = Math.ceil(h * dpr);
+  c.style.width = w + "px";
+  c.style.height = h + "px";
+  const x = c.getContext("2d");
+  x.scale(dpr, dpr);
+  x.font = fontCss(st, sizePx);
+  x.fillStyle = color;
+  x.textBaseline = "alphabetic";
+  if (trackPx && text.length > 1) {
+    let adv = pad;
+    for (const ch of text) {
+      x.fillText(ch, adv, pad + m.asc);
+      adv += x.measureText(ch).width + trackPx;
+    }
+  } else {
+    x.fillText(text, pad, pad + m.asc);
+  }
+  c._metrics = { asc: m.asc, pad };
+  return c;
+}
+function textObjectMetrics(o) {
+  const lines = String(o.text || "").split("\n");
+  let mw = 0;
+  for (const ln of lines) mw = Math.max(mw, measure(ln || " ", o.fam, o.bold, o.italic, o.size, o.css).w);
+  return {
+    w: Math.max(8, mw),
+    h: Math.max(o.size * 1.2, lines.length * o.size * 1.15)
+  };
+}
+function appendEditSuffix(e, L) {
+  const original = e && (e.original || L.str);
+  if (!e || e.deleted || !e.text || !original) return "";
+  return e.text.startsWith(original) && e.text.length > original.length ? e.text.slice(original.length) : "";
+}
+function stNum(st, key, fallback) {
+  const n = Number(st && st[key]);
+  return Number.isFinite(n) ? n : fallback;
+}
+function appendGapForStyle(st) {
+  return measure(" ", st.fam, st.bold, st.italic, st.size, st.css).w;
+}
+function autosizeTextObject(o, keepUserWidth) {
+  if (!o || o.type !== "text") return;
+  const m = textObjectMetrics(o);
+  if (!keepUserWidth || !o.userSized) o.w = m.w;
+  o.h = m.h;
+}
+
+/* ---------- 12. overlays: whiteouts, replacement text, hit targets ---------- */
+function drawAllOverlays() { for (let i = 0; i < S.views.length; i++) drawOverlay(i); }
+
+function drawOverlay(i) {
+  const v = S.views[i]; if (!v) return;
+  const sc = S.scale;
+
+  /* -- replacement layer -- */
+  v.lEdit.innerHTML = "";
+  if (v.lines) {
+    for (const L of v.lines) {
+      const e = S.edits[L.uid];
+      if (!e) continue;
+      const suffix = appendEditSuffix(e, L);
+      const pad = Math.max(0.6, L.fh * 0.1);
+      if (!suffix && e.cover !== false) {
+        const cover = el("div", "repaint");
+        cover.style.cssText =
+          "left:" + ((L.x - pad) * sc) + "px;top:" + ((L.top - pad * 0.6) * sc) + "px;" +
+          "width:" + ((L.w + pad * 2) * sc) + "px;height:" + ((L.h + pad * 1.2) * sc) + "px;" +
+          "background:" + (e.bg || "#ffffff") + ";transform:rotate(" + L.angle + "rad);transform-origin:0 0;";
+        v.lEdit.appendChild(cover);
+      }
+      if (e.deleted || !e.text) continue;
+
+      const st = e.style;
+      const drawText = suffix ? suffix.replace(/^\s+/, "") : e.text;
+      const sizePx = st.size * sc;
+      let ls = stNum(st, "track", 0) * sc;
+      const measured = measure(drawText, st.fam, st.bold, st.italic, sizePx, st.css);
+      if (!suffix && e.fit && e.text.length > 1) ls = (L.w * sc - measured.w) / (e.text.length - 1);
+      const t = textCanvas(drawText, st, sizePx, st.color, ls);
+      const m = t._metrics || { asc: measured.asc, pad: 0 };
+      const x = (suffix ? L.x + L.w + appendGapForStyle(st) : L.x) + stNum(st, "dx", 0);
+      const base = L.base + stNum(st, "dy", 0);
+      t.style.left = (x * sc - m.pad) + "px";
+      t.style.top = (base * sc - m.asc - m.pad) + "px";
+      t.style.transform = "rotate(" + L.angle + "rad)";
+      t.style.transformOrigin = "0 " + m.asc + "px";
+      v.lEdit.appendChild(t);
+    }
+  }
+
+  /* -- hit targets for the text tool -- */
+  v.lText.innerHTML = "";
+  if (v.lines && (S.tool === "text" || S.tool === "select")) {
+    for (const L of v.lines) {
+      const e = S.edits[L.uid];
+      const d = el("div", "tline" + (e ? (e.deleted ? " hidden-src" : " edited") : ""));
+      const suffix = e ? appendEditSuffix(e, L) : "";
+      const st = e ? e.style : null;
+      const extraW = suffix && st ? appendGapForStyle(st) + measure(suffix.replace(/^\s+/, ""), st.fam, st.bold, st.italic, st.size, st.css).w + Math.max(0, stNum(st, "dx", 0)) : 0;
+      d.dataset.uid = L.uid;
+      d.style.cssText =
+        "left:" + (L.x * sc) + "px;top:" + (L.top * sc) + "px;width:" + ((L.w + extraW) * sc) + "px;" +
+        "height:" + (L.h * sc) + "px;transform:rotate(" + L.angle + "rad);" +
+        "transform-origin:0 " + (L.asc * L.fh * sc) + "px;";
+      d.title = L.font + " · " + L.size.toFixed(1) + "pt";
+      v.lText.appendChild(d);
+    }
+  }
+  renderObjects(i);
+}
+
+/* ---------- 13. editing a line in place ---------- */
+let activeEditor = null;
+
+function lineByUid(uid) {
+  for (const v of S.views) if (v.lines) { const L = v.lines.find(l => l.uid === uid); if (L) return { L, v }; }
+  return null;
+}
+
+function styleForLine(L) {
+  const e = S.edits[L.uid];
+  if (e) return Object.assign({}, e.style);
+  const probe = sampleRegion(S.views[L.page], L.x, L.top, L.w, L.h);
+  return {
+    fam: L.fam, css: L.css, bold: L.bold, italic: L.italic, size: L.size,
+    color: probe && probe.confident ? probe.ink : "#111111"
+  };
+}
+
+function beginEdit(uid, mode, selectAll) {
+  commitEdit();
+  const found = lineByUid(uid); if (!found) return;
+  const { L, v } = found;
+  S.selLine = uid; S.sel = null;
+  const sc = S.scale;
+  const cur = S.edits[uid];
+  const st = styleForLine(L);
+  const bg = (cur && cur.bg) || (function () { const p = sampleRegion(v, L.x - 1, L.top - 1, L.w + 2, L.h + 2); return p ? p.bg : "#ffffff"; })();
+  const suffix = cur ? appendEditSuffix(cur, L).replace(/^\s+/, "") : "";
+  const appendMode = mode === "append";
+  const text = appendMode ? suffix : (cur ? cur.text : L.str);
+
+  const box = el("div", "tedit");
+  try { box.contentEditable = "plaintext-only"; } catch (err) {}
+  if (box.contentEditable !== "plaintext-only") box.contentEditable = "true";
+  box.spellcheck = false;
+  box.textContent = text;
+  const sizePx = st.size * sc;
+  const m = measure(text || " ", st.fam, st.bold, st.italic, sizePx, st.css);
+  const editX = (appendMode ? L.x + L.w + appendGapForStyle(st) : L.x) + stNum(st, "dx", 0);
+  const editBase = L.base + stNum(st, "dy", 0);
+  const minW = appendMode ? Math.max(40, m.w + 12) : Math.max(18, L.w * sc);
+  box.style.cssText =
+    "left:" + (editX * sc) + "px;top:" + (editBase * sc - m.asc) + "px;min-width:" + minW + "px;" +
+    "font:" + (st.italic ? "italic " : "") + (st.bold ? "700 " : "400 ") + sizePx + "px " + cssStack(st.fam, st.css) + ";" +
+    "color:" + st.color + ";background:" + (appendMode ? "rgba(255,255,255,.88)" : bg) + ";" +
+    "transform:rotate(" + L.angle + "rad);transform-origin:0 " + m.asc + "px;padding:1px 2px;margin-left:-2px;";
+  v.lText.appendChild(box);
+  activeEditor = { uid, box, L, v, st, bg, original: L.str, appendMode };
+  box.focus();
+  const r = document.createRange(); r.selectNodeContents(box);
+  if (!selectAll) r.collapse(false);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+
+  box.addEventListener("keydown", ev => {
+    if (ev.key === "Escape") { ev.preventDefault(); cancelEdit(); }
+    if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); commitEdit(); }
+    ev.stopPropagation();
+  });
+  box.addEventListener("blur", () => setTimeout(commitEdit, 40));
+  updateInspector();
+}
+
+function cancelEdit() {
+  if (!activeEditor) return;
+  const a = activeEditor; activeEditor = null;
+  a.box.remove();
+  updateInspector();
+}
+
+function commitEdit() {
+  if (!activeEditor) return;
+  const a = activeEditor; activeEditor = null;
+  const text = a.box.innerText.replace(/\n$/, "");
+  a.box.remove();
+  if (a.appendMode) {
+    const clean = text.trim();
+    if (!clean) delete S.edits[a.uid];
+    else {
+      S.edits[a.uid] = {
+        text: a.original + " " + clean, style: a.st, bg: a.bg,
+        deleted: false, fit: false, original: a.original, appendOnly: true
+      };
+    }
+    S.selLine = a.uid;
+    S.sel = null;
+    drawOverlay(a.L.page);
+    snapshot(); status(); updateInspector();
+    return;
+  }
+  if (text === a.original && !S.edits[a.uid]) { updateInspector(); return; }
+  if (!S.edits[a.uid] && text.startsWith(a.original) && text.length > a.original.length) {
+    S.edits[a.uid] = {
+      text, style: a.st, bg: a.bg,
+      deleted: false, fit: false, original: a.original, appendOnly: true
+    };
+    S.selLine = a.uid;
+    S.sel = null;
+    drawOverlay(a.L.page);
+    snapshot(); status(); updateInspector();
+    return;
+  }
+  const prev = S.edits[a.uid];
+  S.edits[a.uid] = {
+    text, style: prev ? prev.style : a.st, bg: prev ? prev.bg : a.bg,
+    deleted: false, fit: prev ? prev.fit : false, original: a.original
+  };
+  if (text === a.original) delete S.edits[a.uid];
+  drawOverlay(a.L.page);
+  snapshot(); status(); updateInspector();
+}
+
+function updateLineStyle(uid, patch) {
+  commitEdit();
+  const found = lineByUid(uid); if (!found) return;
+  const { L } = found;
+  const e = S.edits[uid] || (S.edits[uid] = {
+    text: L.str, style: styleForLine(L), bg: (sampleRegion(S.views[L.page], L.x - 1, L.top - 1, L.w + 2, L.h + 2) || {}).bg || "#ffffff",
+    deleted: false, fit: false, original: L.str
+  });
+  if (patch.style) Object.assign(e.style, patch.style);
+  if ("fit" in patch) e.fit = patch.fit;
+  if ("bg" in patch) e.bg = patch.bg;
+  if ("deleted" in patch) e.deleted = patch.deleted;
+  if ("cover" in patch) e.cover = patch.cover;
+  if ("text" in patch) e.text = patch.text;
+  drawOverlay(L.page); snapshot(); status(); updateInspector();
+}
+
+function revertLine(uid) {
+  const found = lineByUid(uid); if (!found) return;
+  delete S.edits[uid];
+  drawOverlay(found.L.page); snapshot(); status(); updateInspector();
+}
+
+/* ---------- 14. objects added on top of the page ---------- */
+function addObject(o) {
+  o.id = uid("o");
+  S.objects.push(o);
+  renderObjects(indexOfKey(o.page));
+  snapshot(); status();
+  return o;
+}
+function indexOfKey(key) { return S.pageList.findIndex(p => p.key === key); }
+function objById(id) { return S.objects.find(o => o.id === id); }
+function removeObject(id) {
+  const o = objById(id); if (!o) return;
+  S.objects = S.objects.filter(x => x.id !== id);
+  if (S.sel === id) S.sel = null;
+  renderObjects(indexOfKey(o.page));
+  snapshot(); status(); updateInspector();
+}
+function bbox(o) {
+  if (o.type === "line") {
+    return { x: Math.min(o.x, o.x + o.w), y: Math.min(o.y, o.y + o.h), w: Math.abs(o.w), h: Math.abs(o.h) };
+  }
+  return { x: o.x, y: o.y, w: o.w, h: o.h };
+}
+function pathFromPts(pts) {
+  if (!pts.length) return "";
+  if (pts.length < 3) {
+    const a = pts[0], b = pts[pts.length - 1];
+    return "M" + a[0] + " " + a[1] + " L" + b[0] + " " + b[1];
+  }
+  let d = "M" + pts[0][0] + " " + pts[0][1];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+    d += " Q" + pts[i][0] + " " + pts[i][1] + " " + mx + " " + my;
+  }
+  const l = pts[pts.length - 1];
+  return d + " L" + l[0] + " " + l[1];
+}
+function ptsToUnit(o) { // normalised points -> page units
+  return o.pts.map(p => [o.x + p[0] * o.w, o.y + p[1] * o.h]);
+}
+
+function renderObjects(i) {
+  const v = S.views[i]; if (!v) return;
+  const sc = S.scale, key = S.pageList[i].key;
+  v.lObj.innerHTML = "";
+  for (const o of S.objects) {
+    if (o.page !== key) continue;
+    const b = bbox(o);
+    const d = el("div", "obj" + (S.sel === o.id ? " selected" : ""));
+    d.dataset.id = o.id;
+    d.style.cssText = "left:" + (b.x * sc) + "px;top:" + (b.y * sc) + "px;width:" + Math.max(1, b.w * sc) + "px;height:" + Math.max(1, b.h * sc) + "px;";
+
+    if (o.type === "image") {
+      const img = el("img"); img.src = o.data; img.draggable = false;
+      if (o.opacity != null) img.style.opacity = o.opacity;
+      d.appendChild(img);
+    } else if (o.type === "text") {
+      const t = el("div", "otext");
+      t.textContent = o.text;
+      t.style.cssText =
+        "font:" + (o.italic ? "italic " : "") + (o.bold ? "700 " : "400 ") + (o.size * sc) + "px " + cssStack(o.fam, o.css) + ";" +
+        "color:" + o.color + ";position:absolute;left:0;top:0;";
+      d.appendChild(t);
+    } else if (isInkLike(o)) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 1 1");
+      svg.setAttribute("preserveAspectRatio", "none");
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", pathFromPts(o.pts));
+      p.setAttribute("fill", "none");
+      p.setAttribute("stroke", o.color);
+      p.setAttribute("stroke-linecap", "round");
+      p.setAttribute("stroke-linejoin", "round");
+      p.setAttribute("vector-effect", "non-scaling-stroke");
+      p.setAttribute("stroke-width", Math.max(0.6, o.width * sc));
+      p.setAttribute("opacity", o.type === "mark" ? 0.42 : (o.opacity != null ? o.opacity : 1));
+      svg.appendChild(p); d.appendChild(svg);
+      d.style.overflow = "visible";
+    } else if (o.type === "rect" || o.type === "ellipse" || o.type === "line") {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 100 100");
+      svg.setAttribute("preserveAspectRatio", "none");
+      let shape;
+      if (o.type === "rect") {
+        shape = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        shape.setAttribute("x", 0); shape.setAttribute("y", 0);
+        shape.setAttribute("width", 100); shape.setAttribute("height", 100);
+      } else if (o.type === "ellipse") {
+        shape = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+        shape.setAttribute("cx", 50); shape.setAttribute("cy", 50);
+        shape.setAttribute("rx", 50); shape.setAttribute("ry", 50);
+      } else {
+        shape = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        const x1 = o.w >= 0 ? 0 : 100, y1 = o.h >= 0 ? 0 : 100;
+        shape.setAttribute("x1", x1); shape.setAttribute("y1", y1);
+        shape.setAttribute("x2", 100 - x1); shape.setAttribute("y2", 100 - y1);
+      }
+      shape.setAttribute("fill", o.fill && o.fill !== "none" ? o.fill : "none");
+      shape.setAttribute("stroke", o.stroke);
+      shape.setAttribute("stroke-width", Math.max(0.5, o.width * sc));
+      shape.setAttribute("vector-effect", "non-scaling-stroke");
+      if (o.opacity != null) shape.setAttribute("opacity", o.opacity);
+      svg.appendChild(shape); d.appendChild(svg);
+      d.style.overflow = "visible";
+    } else if (o.type === "erase") {
+      d.style.background = o.color;
+    }
+
+    if (S.sel === o.id && S.tool === "select") {
+      ["nw", "ne", "sw", "se"].forEach(h => { const k = el("div", "handle " + h); k.dataset.h = h; d.appendChild(k); });
+      const del = el("div", "del", ic('<path d="m6 6 12 12M18 6 6 18"/>', 2));
+      del.dataset.del = "1";
+      d.appendChild(del);
+    }
+    v.lObj.appendChild(d);
+  }
+}
+
+/* ---------- 15. pointer plumbing ---------- */
+function unitPoint(v, ev) {
+  const r = v.node.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / S.scale, y: (ev.clientY - r.top) / S.scale };
+}
+function viewFromEvent(ev) {
+  const node = ev.target.closest(".page");
+  if (!node) return null;
+  return S.views[Number(node.dataset.i)];
+}
+
+/* --- drawing / shape creation on the capture layer --- */
+let draft = null;
+function onCaptureDown(ev) {
+  const v = viewFromEvent(ev); if (!v) return;
+  if (ev.button !== 0) return;
+  const p = unitPoint(v, ev);
+  ev.preventDefault();
+  ev.target.setPointerCapture(ev.pointerId);
+  const t = S.tool;
+
+  if (t === "addtext") {
+    const draftText = "Type here";
+    const o = addObject({
+      type: "text", page: v.key, x: p.x, y: p.y, w: 160, h: S.defaults.size * 1.2,
+      text: draftText, size: S.defaults.size, fam: S.defaults.fam,
+      bold: S.defaults.bold, italic: S.defaults.italic, color: S.defaults.color
+    });
+    autosizeTextObject(o);
+    setTool("select"); selectObject(o.id);
+    setTimeout(() => beginObjTextEdit(o.id, true), 20);
+    return;
+  }
+  if (t === "place" && S.pending) {
+    const pend = S.pending;
+    const o = addObject(Object.assign({}, pend, {
+      page: v.key, x: p.x - pend.w / 2, y: p.y - pend.h / 2
+    }));
+    S.pending = null; setTool("select"); selectObject(o.id);
+    return;
+  }
+  if (t === "draw" || t === "mark") {
+    draft = { kind: t, v, pts: [[p.x, p.y]] };
+    return;
+  }
+  if (t === "rect" || t === "ellipse" || t === "line" || t === "erase") {
+    draft = { kind: t, v, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    return;
+  }
+}
+function onCaptureMove(ev) {
+  const v = viewFromEvent(ev);
+  if (v) {
+    const p = unitPoint(v, ev);
+    const q = v.vp1 ? v.vp1.convertToPdfPoint(p.x, p.y) : [p.x, p.y];
+    $("#statXY").textContent = "x " + q[0].toFixed(1) + "  y " + q[1].toFixed(1);
+  }
+  if (!draft) return;
+  const p = unitPoint(draft.v, ev);
+  if (draft.kind === "draw" || draft.kind === "mark") {
+    const last = draft.pts[draft.pts.length - 1];
+    if (Math.hypot(p.x - last[0], p.y - last[1]) < 0.7) return;
+    draft.pts.push([p.x, p.y]);
+  } else { draft.x1 = p.x; draft.y1 = p.y; }
+  paintDraft();
+}
+function onCaptureUp() {
+  if (!draft) return;
+  const d = draft; draft = null;
+  clearDraft();
+  if (d.kind === "draw" || d.kind === "mark") {
+    if (d.pts.length < 2) return;
+    const xs = d.pts.map(p => p[0]), ys = d.pts.map(p => p[1]);
+    const x = Math.min.apply(null, xs), y = Math.min.apply(null, ys);
+    const w = Math.max(0.5, Math.max.apply(null, xs) - x), h = Math.max(0.5, Math.max.apply(null, ys) - y);
+    addObject({
+      type: d.kind === "draw" ? "ink" : d.kind, page: d.v.key, x, y, w, h,
+      pts: d.pts.map(p => [(p[0] - x) / w, (p[1] - y) / h]),
+      color: d.kind === "mark" ? S.defaults.markColor : S.defaults.inkColor,
+      width: d.kind === "mark" ? S.defaults.markWidth : S.defaults.inkWidth
+    });
+    return;
+  }
+  const w = d.x1 - d.x0, h = d.y1 - d.y0;
+  if (Math.abs(w) < 2 && Math.abs(h) < 2) return;
+  if (d.kind === "line") {
+    addObject({ type: "line", page: d.v.key, x: d.x0, y: d.y0, w, h, stroke: S.defaults.shapeStroke, width: S.defaults.shapeWidth });
+  } else if (d.kind === "erase") {
+    let color = S.defaults.eraseColor;
+    if (S.defaults.autoBg) {
+      const probe = sampleRegion(d.v, Math.min(d.x0, d.x1) - 3, Math.min(d.y0, d.y1) - 3, Math.abs(w) + 6, 3);
+      if (probe) color = probe.bg;
+    }
+    addObject({ type: "erase", page: d.v.key, x: Math.min(d.x0, d.x1), y: Math.min(d.y0, d.y1), w: Math.abs(w), h: Math.abs(h), color });
+  } else {
+    addObject({
+      type: d.kind, page: d.v.key, x: Math.min(d.x0, d.x1), y: Math.min(d.y0, d.y1),
+      w: Math.abs(w), h: Math.abs(h), stroke: S.defaults.shapeStroke,
+      fill: S.defaults.shapeFill, width: S.defaults.shapeWidth
+    });
+  }
+}
+function clearDraft() { $$(".draftlayer").forEach(n => n.remove()); }
+function paintDraft() {
+  clearDraft();
+  const d = draft; if (!d) return;
+  const sc = S.scale;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "draftlayer");
+  svg.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:6;overflow:visible";
+  let node;
+  if (d.kind === "draw" || d.kind === "mark") {
+    node = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    node.setAttribute("d", pathFromPts(d.pts.map(p => [p[0] * sc, p[1] * sc])));
+    node.setAttribute("fill", "none");
+    node.setAttribute("stroke", d.kind === "mark" ? S.defaults.markColor : S.defaults.inkColor);
+    node.setAttribute("stroke-width", (d.kind === "mark" ? S.defaults.markWidth : S.defaults.inkWidth) * sc);
+    node.setAttribute("stroke-linecap", "round");
+    node.setAttribute("stroke-linejoin", "round");
+    node.setAttribute("opacity", d.kind === "mark" ? 0.42 : 1);
+  } else {
+    const x = Math.min(d.x0, d.x1) * sc, y = Math.min(d.y0, d.y1) * sc;
+    const w = Math.abs(d.x1 - d.x0) * sc, h = Math.abs(d.y1 - d.y0) * sc;
+    if (d.kind === "line") {
+      node = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      node.setAttribute("x1", d.x0 * sc); node.setAttribute("y1", d.y0 * sc);
+      node.setAttribute("x2", d.x1 * sc); node.setAttribute("y2", d.y1 * sc);
+      node.setAttribute("stroke", S.defaults.shapeStroke);
+      node.setAttribute("stroke-width", S.defaults.shapeWidth * sc);
+    } else if (d.kind === "ellipse") {
+      node = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+      node.setAttribute("cx", x + w / 2); node.setAttribute("cy", y + h / 2);
+      node.setAttribute("rx", w / 2); node.setAttribute("ry", h / 2);
+      node.setAttribute("fill", S.defaults.shapeFill === "none" ? "none" : S.defaults.shapeFill);
+      node.setAttribute("stroke", S.defaults.shapeStroke);
+      node.setAttribute("stroke-width", S.defaults.shapeWidth * sc);
+    } else {
+      node = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      node.setAttribute("x", x); node.setAttribute("y", y);
+      node.setAttribute("width", w); node.setAttribute("height", h);
+      node.setAttribute("fill", d.kind === "erase" ? S.defaults.eraseColor : (S.defaults.shapeFill === "none" ? "none" : S.defaults.shapeFill));
+      node.setAttribute("stroke", d.kind === "erase" ? "#28B9CE" : S.defaults.shapeStroke);
+      node.setAttribute("stroke-dasharray", d.kind === "erase" ? "4 3" : "");
+      node.setAttribute("stroke-width", d.kind === "erase" ? 1 : S.defaults.shapeWidth * sc);
+    }
+  }
+  svg.appendChild(node);
+  d.v.lObj.appendChild(svg);
+}
+
+/* --- select / move / resize --- */
+let dragging = null;
+function selectObject(id) {
+  S.sel = id; S.selLine = null;
+  drawAllOverlays(); updateInspector();
+}
+function onObjDown(ev) {
+  const objEl = ev.target.closest(".obj");
+  const lineEl = ev.target.closest(".tline");
+  if (lineEl) {
+    ev.preventDefault();
+    beginEdit(lineEl.dataset.uid, "replace");
+    return;
+  }
+  if (!objEl) {
+    if (S.sel || S.selLine) { S.sel = null; S.selLine = null; drawAllOverlays(); updateInspector(); }
+    return;
+  }
+  ev.preventDefault();
+  const o = objById(objEl.dataset.id); if (!o) return;
+  if (ev.target.closest("[data-del]")) { removeObject(o.id); return; }
+  if (S.sel !== o.id) selectObject(o.id);
+  const v = viewFromEvent(ev); if (!v) return;
+  const start = unitPoint(v, ev);
+  const handle = ev.target.dataset.h || null;
+  dragging = { o, v, start, handle, orig: JSON.parse(JSON.stringify(o)), moved: false };
+  ev.target.setPointerCapture(ev.pointerId);
+}
+function onObjMove(ev) {
+  if (!dragging) return;
+  const p = unitPoint(dragging.v, ev);
+  const dx = p.x - dragging.start.x, dy = p.y - dragging.start.y;
+  if (Math.abs(dx) + Math.abs(dy) > 0.4) dragging.moved = true;
+  const o = dragging.o, g = dragging.orig;
+  if (!dragging.handle) { o.x = g.x + dx; o.y = g.y + dy; }
+  else {
+    const h = dragging.handle;
+    let x = g.x, y = g.y, w = g.w, h2 = g.h;
+    if (o.type === "line") { // move an endpoint
+      if (h === "nw") { x = g.x + dx; y = g.y + dy; w = g.w - dx; h2 = g.h - dy; }
+      else { w = g.w + dx; h2 = g.h + dy; }
+    } else {
+      if (h.includes("w")) { x = g.x + dx; w = g.w - dx; }
+      if (h.includes("e")) { w = g.w + dx; }
+      if (h.includes("n")) { y = g.y + dy; h2 = g.h - dy; }
+      if (h.includes("s")) { h2 = g.h + dy; }
+      if (ev.shiftKey && g.w && g.h) { const r = g.h / g.w; h2 = Math.sign(h2 || 1) * Math.abs(w) * r; }
+      if (w < 3) { w = 3; } if (h2 < 3 && o.type !== "line") { h2 = 3; }
+      if (o.type === "text") { o.size = Math.max(3, g.size * (w / Math.max(1, g.w))); }
+    }
+    o.x = x; o.y = y; o.w = w; o.h = h2;
+  }
+  renderObjects(indexOfKey(o.page));
+}
+function onObjUp() {
+  if (!dragging) return;
+  const moved = dragging.moved;
+  dragging = null;
+  if (moved) { snapshot(); updateInspector(); }
+}
+
+/* --- editing a text object in place --- */
+function beginObjTextEdit(id, selectAll) {
+  const o = objById(id); if (!o || o.type !== "text") return;
+  const i = indexOfKey(o.page), v = S.views[i], sc = S.scale;
+  const box = el("div", "tedit");
+  try { box.contentEditable = "plaintext-only"; } catch (err) {}
+  if (box.contentEditable !== "plaintext-only") box.contentEditable = "true";
+  box.textContent = o.text;
+  box.style.cssText =
+    "left:" + (o.x * sc) + "px;top:" + (o.y * sc) + "px;" +
+    "font:" + (o.italic ? "italic " : "") + (o.bold ? "700 " : "400 ") + (o.size * sc) + "px " + cssStack(o.fam, o.css) + ";" +
+    "color:" + o.color + ";line-height:1.15;background:rgba(255,255,255,.94);padding:1px 2px;margin-left:-2px;";
+  v.lText.appendChild(box);
+  box.focus();
+  if (selectAll) { const r = document.createRange(); r.selectNodeContents(box); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+  const done = () => {
+    o.text = box.innerText.replace(/\n$/, "");
+    const lines = o.text.split("\n");
+    let mw = 0;
+    for (const ln of lines) mw = Math.max(mw, measure(ln, o.fam, o.bold, o.italic, o.size, o.css).w);
+    o.w = Math.max(8, mw); o.h = Math.max(o.size * 1.2, lines.length * o.size * 1.15);
+    o.userSized = false;
+    box.remove();
+    renderObjects(i); snapshot(); updateInspector();
+  };
+  box.addEventListener("blur", done, { once: true });
+  box.addEventListener("keydown", e => {
+    e.stopPropagation();
+    if (e.key === "Escape") { e.preventDefault(); box.blur(); }
+  });
+}
+
+/* ---------- 16. images and signatures ---------- */
+function imageSize(dataUrl) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => res({ w: im.naturalWidth, h: im.naturalHeight });
+    im.onerror = () => res({ w: 200, h: 100 });
+    im.src = dataUrl;
+  });
+}
+async function stageImage(dataUrl, maxW, isSig) {
+  dataUrl = await normalizeImageDataUrl(dataUrl);
+  const nat = await imageSize(dataUrl);
+  const cap = maxW || 240;
+  const k = Math.min(1, cap / nat.w);
+  S.pending = {
+    type: "image", data: dataUrl, w: nat.w * k, h: nat.h * k,
+    mime: /^data:image\/png/i.test(dataUrl) ? "png" : "jpg", sig: !!isSig
+  };
+  setTool("place");
+  toast(isSig ? "Click where the signature goes" : "Click to place the image");
+}
+function fileToDataUrl(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
+}
+function normalizeImageDataUrl(dataUrl) {
+  if (/^data:image\/(png|jpe?g);/i.test(dataUrl)) return Promise.resolve(dataUrl);
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = im.naturalWidth || 1; c.height = im.naturalHeight || 1;
+      c.getContext("2d").drawImage(im, 0, 0);
+      res(c.toDataURL("image/png"));
+    };
+    im.onerror = () => res(dataUrl);
+    im.src = dataUrl;
+  });
+}
+/* Lift a signature off its paper: near-white becomes transparent and the
+   remaining ink is pushed to full opacity. */
+function keyOutBackground(dataUrl, tolerance) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = im.naturalWidth; c.height = im.naturalHeight;
+      const x = c.getContext("2d");
+      x.drawImage(im, 0, 0);
+      const d = x.getImageData(0, 0, c.width, c.height);
+      const p = d.data, tol = tolerance == null ? 205 : tolerance;
+      for (let i = 0; i < p.length; i += 4) {
+        const lum = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+        if (lum > tol) p[i + 3] = 0;
+        else if (lum > tol - 60) p[i + 3] = Math.round(255 * (tol - lum) / 60);
+      }
+      x.putImageData(d, 0, 0);
+      res(c.toDataURL("image/png"));
+    };
+    im.onerror = () => res(dataUrl);
+    im.src = dataUrl;
+  });
+}
+/* Crop a canvas to its non-transparent content so the placed signature has
+   no dead margin around it. */
+function trimCanvas(c) {
+  const x = c.getContext("2d");
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let top = c.height, left = c.width, right = 0, bottom = 0, found = false;
+  for (let y = 0; y < c.height; y++) for (let xx = 0; xx < c.width; xx++) {
+    if (d[(y * c.width + xx) * 4 + 3] > 8) {
+      found = true;
+      if (y < top) top = y; if (y > bottom) bottom = y;
+      if (xx < left) left = xx; if (xx > right) right = xx;
+    }
+  }
+  if (!found) return c;
+  const pad = 6;
+  top = Math.max(0, top - pad); left = Math.max(0, left - pad);
+  bottom = Math.min(c.height - 1, bottom + pad); right = Math.min(c.width - 1, right + pad);
+  const o = document.createElement("canvas");
+  o.width = right - left + 1; o.height = bottom - top + 1;
+  o.getContext("2d").drawImage(c, left, top, o.width, o.height, 0, 0, o.width, o.height);
+  return o;
+}
+
+/* ---------- 17. inspector ---------- */
+function famOptions(sel) {
+  let h = "";
+  [["Helvetica", "Helvetica / Arial"], ["Times", "Times / serif"], ["Courier", "Courier / mono"]]
+    .forEach(([v, l]) => { h += '<option value="' + v + '"' + (sel === v ? " selected" : "") + ">" + l + "</option>"; });
+  for (const label in S.customFonts) {
+    const v = "custom:" + label;
+    h += '<option value="' + v + '"' + (sel === v ? " selected" : "") + ">" + label + " (embedded)</option>";
+  }
+  return h;
+}
+function row(label, inner) { return '<div class="row"><label>' + label + "</label>" + inner + "</div>"; }
+function fld(inner) { return '<div class="field">' + inner + "</div>"; }
+
+function updateInspector() {
+  const body = $("#inspBody");
+  const title = $("#inspTitle");
+  const uidSel = activeEditor ? activeEditor.uid : S.selLine;
+
+  if (uidSel) {
+    const found = lineByUid(uidSel);
+    if (found) { title.textContent = "Text run"; body.innerHTML = lineInspector(found.L); wireLineInspector(found.L); return; }
+  }
+  if (S.sel) {
+    const o = objById(S.sel);
+    if (o) { title.textContent = objLabel(o); body.innerHTML = objInspector(o); wireObjInspector(o); return; }
+  }
+  title.textContent = S.pdf ? "Document" : "Inspector";
+  body.innerHTML = docInspector();
+  wireDocInspector();
+}
+
+function lineInspector(L) {
+  const e = S.edits[L.uid];
+  const st = e ? e.style : styleForLine(L);
+  const text = e ? e.text : L.str;
+  const cl = classifyFont(L.font, L.css);
+  return '' +
+    '<div class="sect"><h3>Detected in file</h3>' +
+      '<div class="readout"><b>' + escapeHtml(L.font || "unnamed") + "</b><br>" +
+      L.size.toFixed(2) + "pt · " + (cl.bold ? "bold" : "regular") + (cl.italic ? " italic" : "") + "<br>" +
+      "browser face: " + escapeHtml(L.css || "not exposed") + "<br>" +
+      "PDF fallback: " + cl.fam + " · width " + L.w.toFixed(1) + "pt</div></div>" +
+
+    '<div class="sect"><h3>Editing as</h3>' +
+      '<div class="readout"><b>' + escapeHtml(st.css || st.fam) + "</b><br>" +
+      Number(st.size || L.size).toFixed(2) + "pt · " + (st.bold ? "bold" : "regular") + (st.italic ? " italic" : "") + "</div></div>" +
+
+    '<div class="sect"><h3>Content</h3>' +
+      '<textarea id="liText" class="textinput" style="height:70px;padding:7px 9px;resize:vertical;line-height:1.4">' + escapeHtml(text) + "</textarea>" +
+      '<p class="hint" style="margin-top:7px">Click the run on the page to edit it in place.</p></div>' +
+    '<div class="sect"><h3>Type</h3>' +
+      row("Face", fld('<select id="liFam">' + famOptions(st.fam) + "</select>")) +
+      row("Size", fld('<input id="liSize" type="number" step="0.25" min="1" value="' + st.size + '"><span class="unit">PT</span>')) +
+      row("Colour", '<input type="color" id="liColor" value="' + st.color + '">' + fld('<span class="unit" id="liColorHex">' + st.color.toUpperCase() + "</span>")) +
+      row("Style", '<div class="seg"><button id="liBold" aria-pressed="' + !!st.bold + '" style="font-weight:700">B</button>' +
+        '<button id="liItalic" aria-pressed="' + !!st.italic + '" style="font-style:italic">I</button></div>') +
+      row("Track", fld('<input id="liTrack" type="number" step="0.1" value="' + stNum(st, "track", 0) + '"><span class="unit">PT</span>')) +
+      row("Nudge", fld('<input id="liDx" type="number" step="0.25" value="' + stNum(st, "dx", 0) + '"><span class="unit">X</span>') +
+        fld('<input id="liDy" type="number" step="0.25" value="' + stNum(st, "dy", 0) + '"><span class="unit">Y</span>')) +
+    "</div>" +
+
+    '<div class="sect"><h3>Fit</h3>' +
+      '<label class="chk"><input type="checkbox" id="liFit"' + ((e ? e.fit : S.defaults.fitWidth) ? " checked" : "") + "> Hold the original line width</label>" +
+      '<label class="chk"><input type="checkbox" id="liCover"' + ((!e || e.cover !== false) ? " checked" : "") + "> Paint a backing rectangle</label>" +
+      row("Backing", '<input type="color" id="liBg" value="' + ((e && e.bg) || "#ffffff") + '">' + fld('<span class="unit">sampled from page</span>')) +
+    "</div>" +
+
+    '<div class="sect"><div class="stack">' +
+      '<button class="btn ghost" id="liAppend">Append after this text</button>' +
+      '<button class="btn ghost" id="liReplace">Replace this text</button>' +
+      '<button class="btn ghost" id="liDelete">' + ic('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>') + "Delete existing text</button>" +
+      (e ? '<button class="btn ghost" id="liRevert">' + ic('<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>') + "Restore original</button>" : "") +
+    "</div></div>";
+}
+function wireLineInspector(L) {
+  const set = (patch) => updateLineStyle(L.uid, patch);
+  const t = $("#liText");
+  if (t) t.addEventListener("change", () => set({ text: t.value }));
+  const f = $("#liFam"); if (f) f.addEventListener("change", () => set({ style: { fam: f.value, css: "" } }));
+  const s = $("#liSize"); if (s) s.addEventListener("change", () => set({ style: { size: parseFloat(s.value) || L.size } }));
+  const c = $("#liColor"); if (c) c.addEventListener("input", () => set({ style: { color: c.value } }));
+  const b = $("#liBold"); if (b) b.addEventListener("click", () => set({ style: { bold: b.getAttribute("aria-pressed") !== "true" } }));
+  const i = $("#liItalic"); if (i) i.addEventListener("click", () => set({ style: { italic: i.getAttribute("aria-pressed") !== "true" } }));
+  const tr = $("#liTrack"); if (tr) tr.addEventListener("change", () => set({ style: { track: parseFloat(tr.value) || 0 } }));
+  const dx = $("#liDx"); if (dx) dx.addEventListener("change", () => set({ style: { dx: parseFloat(dx.value) || 0 } }));
+  const dy = $("#liDy"); if (dy) dy.addEventListener("change", () => set({ style: { dy: parseFloat(dy.value) || 0 } }));
+  const fit = $("#liFit"); if (fit) fit.addEventListener("change", () => set({ fit: fit.checked }));
+  const bg = $("#liBg"); if (bg) bg.addEventListener("input", () => set({ bg: bg.value }));
+  const cv = $("#liCover"); if (cv) cv.addEventListener("change", () => set({ cover: cv.checked }));
+  const del = $("#liDelete"); if (del) del.addEventListener("click", () => set({ deleted: true, text: "" }));
+  const app = $("#liAppend"); if (app) app.addEventListener("click", () => beginEdit(L.uid, "append", true));
+  const rep = $("#liReplace"); if (rep) rep.addEventListener("click", () => beginEdit(L.uid, "replace", true));
+  const rev = $("#liRevert"); if (rev) rev.addEventListener("click", () => revertLine(L.uid));
+}
+
+function isInkLike(o) { return o && (o.type === "ink" || o.type === "draw" || o.type === "mark"); }
+function objLabel(o) {
+  return ({ text: "Text box", image: o.sig ? "Signature" : "Image", ink: "Pen stroke", draw: "Pen stroke", mark: "Highlight", rect: "Rectangle", ellipse: "Ellipse", line: "Line", erase: "Whiteout" })[o.type] || "Object";
+}
+function objInspector(o) {
+  const b = bbox(o);
+  let h = '<div class="sect"><h3>Geometry</h3>' +
+    row("X / Y", fld('<input id="obX" type="number" step="0.5" value="' + b.x.toFixed(1) + '">') + fld('<input id="obY" type="number" step="0.5" value="' + b.y.toFixed(1) + '">')) +
+    row("W / H", fld('<input id="obW" type="number" step="0.5" value="' + b.w.toFixed(1) + '">') + fld('<input id="obH" type="number" step="0.5" value="' + b.h.toFixed(1) + '">')) +
+    "</div>";
+
+  if (o.type === "text") {
+    h += '<div class="sect"><h3>Type</h3>' +
+      '<textarea id="obText" class="textinput" style="height:64px;padding:7px 9px;resize:vertical">' + escapeHtml(o.text) + "</textarea>" +
+      row("Face", fld('<select id="obFam">' + famOptions(o.fam) + "</select>")) +
+      row("Size", fld('<input id="obSize" type="number" step="0.5" min="1" value="' + o.size + '"><span class="unit">PT</span>')) +
+      row("Colour", '<input type="color" id="obColor" value="' + o.color + '">' +
+        '<div class="seg" style="flex:1"><button id="obBold" aria-pressed="' + !!o.bold + '" style="font-weight:700">B</button><button id="obItalic" aria-pressed="' + !!o.italic + '" style="font-style:italic">I</button></div>') +
+      "</div>";
+  }
+  if (isInkLike(o)) {
+    h += '<div class="sect"><h3>Stroke</h3>' +
+      row("Colour", '<input type="color" id="obStroke" value="' + o.color + '">' + fld('<input id="obWidth" type="number" step="0.2" min="0.2" value="' + o.width + '"><span class="unit">PT</span>')) +
+      "</div>";
+  }
+  if (o.type === "rect" || o.type === "ellipse" || o.type === "line") {
+    h += '<div class="sect"><h3>Shape</h3>' +
+      row("Line", '<input type="color" id="obStroke" value="' + o.stroke + '">' + fld('<input id="obWidth" type="number" step="0.2" min="0.1" value="' + o.width + '"><span class="unit">PT</span>')) +
+      (o.type !== "line" ? row("Fill", '<input type="color" id="obFill" value="' + (o.fill && o.fill !== "none" ? o.fill : "#ffffff") + '">' +
+        '<label class="chk" style="margin:0"><input type="checkbox" id="obNoFill"' + (!o.fill || o.fill === "none" ? " checked" : "") + "> none</label>") : "") +
+      "</div>";
+  }
+  if (o.type === "erase") {
+    h += '<div class="sect"><h3>Cover</h3>' + row("Colour", '<input type="color" id="obErase" value="' + o.color + '">' + fld('<span class="unit">matches page</span>')) + "</div>";
+  }
+  if (o.type === "image") {
+    h += '<div class="sect"><h3>Image</h3>' +
+      row("Opacity", '<input id="obOpacity" type="range" min="0.1" max="1" step="0.05" value="' + (o.opacity == null ? 1 : o.opacity) + '">') +
+      '<label class="chk"><input type="checkbox" id="obLock" checked> Keep aspect ratio while resizing</label></div>';
+  }
+  h += '<div class="sect"><div class="stack">' +
+    '<button class="btn ghost" id="obDup">' + ic('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>') + "Duplicate</button>" +
+    '<button class="btn ghost" id="obDel">' + ic('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>') + "Delete</button>" +
+    "</div></div>";
+  return h;
+}
+function wireObjInspector(o) {
+  const upd = () => { renderObjects(indexOfKey(o.page)); snapshot(); status(); };
+  const num = (id, key, extra) => {
+    const n = $(id); if (!n) return;
+    n.addEventListener("change", () => { o[key] = parseFloat(n.value) || 0; if (key === "w" || key === "h") o.userSized = true; if (extra) extra(); upd(); });
+  };
+  num("#obX", "x"); num("#obY", "y"); num("#obW", "w"); num("#obH", "h");
+  const bind = (id, key, ev, extra) => { const n = $(id); if (n) n.addEventListener(ev || "input", () => { o[key] = n.value; if (extra) extra(); upd(); }); };
+  bind("#obText", "text", "input", () => autosizeTextObject(o, true));
+  bind("#obFam", "fam", "change", () => { o.css = ""; autosizeTextObject(o, true); });
+  bind("#obColor", "color");
+  bind("#obStroke", isInkLike(o) ? "color" : "stroke");
+  bind("#obErase", "color");
+  const sz = $("#obSize"); if (sz) sz.addEventListener("change", () => { o.size = parseFloat(sz.value) || o.size; autosizeTextObject(o, true); upd(); });
+  const wd = $("#obWidth"); if (wd) wd.addEventListener("change", () => { o.width = parseFloat(wd.value) || o.width; upd(); });
+  const bo = $("#obBold"); if (bo) bo.addEventListener("click", () => { o.bold = bo.getAttribute("aria-pressed") !== "true"; autosizeTextObject(o, true); upd(); updateInspector(); });
+  const it = $("#obItalic"); if (it) it.addEventListener("click", () => { o.italic = it.getAttribute("aria-pressed") !== "true"; autosizeTextObject(o, true); upd(); updateInspector(); });
+  const fl = $("#obFill"); if (fl) fl.addEventListener("input", () => { o.fill = fl.value; const nf = $("#obNoFill"); if (nf) nf.checked = false; upd(); });
+  const nf = $("#obNoFill"); if (nf) nf.addEventListener("change", () => { o.fill = nf.checked ? "none" : ($("#obFill") ? $("#obFill").value : "#ffffff"); upd(); });
+  const op = $("#obOpacity"); if (op) op.addEventListener("input", () => { o.opacity = parseFloat(op.value); upd(); });
+  const du = $("#obDup"); if (du) du.addEventListener("click", () => {
+    const c = JSON.parse(JSON.stringify(o)); c.x += 10; c.y += 10; delete c.id;
+    const n = addObject(c); selectObject(n.id);
+  });
+  const dl = $("#obDel"); if (dl) dl.addEventListener("click", () => removeObject(o.id));
+}
+
+function docInspector() {
+  if (!S.pdf) return '<div class="empty-insp">Open a PDF and its text runs, fonts and pages show up here.</div>';
+  const names = Object.keys(S.fonts).sort((a, b) => S.fonts[b].count - S.fonts[a].count);
+  let fh = names.length
+    ? names.slice(0, 14).map(n => {
+        const c = classifyFont(n, "");
+        return '<div class="fontrow"><span class="n" title="' + escapeHtml(n) + '">' + escapeHtml(n || "unnamed") + '</span><span class="m">→ ' + c.fam.slice(0, 4).toUpperCase() + " · " + S.fonts[n].count + "</span></div>";
+      }).join("")
+    : '<p class="hint">Scroll through the pages to index their fonts.</p>';
+
+  let tools = "";
+  if (S.tool === "draw") tools = row("Ink", '<input type="color" id="dfInk" value="' + S.defaults.inkColor + '">' + fld('<input id="dfInkW" type="number" step="0.2" min="0.2" value="' + S.defaults.inkWidth + '"><span class="unit">PT</span>'));
+  else if (S.tool === "mark") tools = row("Marker", '<input type="color" id="dfMark" value="' + S.defaults.markColor + '">' + fld('<input id="dfMarkW" type="number" step="1" min="2" value="' + S.defaults.markWidth + '"><span class="unit">PT</span>'));
+  else if (S.tool === "rect" || S.tool === "ellipse" || S.tool === "line")
+    tools = row("Line", '<input type="color" id="dfStroke" value="' + S.defaults.shapeStroke + '">' + fld('<input id="dfSW" type="number" step="0.2" min="0.1" value="' + S.defaults.shapeWidth + '"><span class="unit">PT</span>')) +
+            row("Fill", '<input type="color" id="dfFill" value="' + (S.defaults.shapeFill === "none" ? "#ffffff" : S.defaults.shapeFill) + '">' +
+              '<label class="chk" style="margin:0"><input type="checkbox" id="dfNoFill"' + (S.defaults.shapeFill === "none" ? " checked" : "") + "> none</label>");
+  else if (S.tool === "addtext")
+    tools = row("Face", fld('<select id="dfFam">' + famOptions(S.defaults.fam) + "</select>")) +
+            row("Size", fld('<input id="dfSize" type="number" step="0.5" min="1" value="' + S.defaults.size + '"><span class="unit">PT</span>')) +
+            row("Colour", '<input type="color" id="dfColor" value="' + S.defaults.color + '">' + fld('<span class="unit">text colour</span>'));
+  else if (S.tool === "erase")
+    tools = '<label class="chk"><input type="checkbox" id="dfAuto"' + (S.defaults.autoBg ? " checked" : "") + "> Sample the colour behind the area</label>" +
+            row("Colour", '<input type="color" id="dfErase" value="' + S.defaults.eraseColor + '">' + fld('<span class="unit">fallback</span>'));
+  else tools = '<p class="hint">Pick a tool to see its settings. <b>E</b> edits text already in the file; <b>T</b> adds a new text box.</p>';
+
+  return '<div class="sect"><h3>' + escapeHtml(toolName(S.tool)) + "</h3>" + tools + "</div>" +
+    '<div class="sect"><h3>On export</h3>' +
+      '<label class="chk"><input type="checkbox" id="dfStrip"' + (S.defaults.strip !== false ? " checked" : "") + "> Erase replaced words from the file</label>" +
+      '<p class="hint">On, the original operators are cut out of the page, so the old wording cannot be copied or searched out of the result. Off, it is only painted over.</p></div>' +
+    '<div class="sect"><h3>Fonts found <span>' + names.length + "</span></h3>" + fh +
+      '<button class="btn ghost" id="addFont" style="width:100%;justify-content:center;margin-top:10px">Embed a .ttf / .otf</button>' +
+      '<input type="file" id="fontFile" accept=".ttf,.otf,font/ttf,font/otf" hidden>' +
+      '<p class="hint" style="margin-top:8px">Without an embedded file, edits are set in the closest of the 14 built-in PDF faces.</p></div>' +
+    '<div class="sect"><h3>Document</h3><div class="readout">' +
+      S.pageList.length + " pages<br>" + Object.keys(S.edits).length + " edited runs<br>" + S.objects.length + " added objects</div></div>" +
+    '<div class="sect"><h3>Export</h3>' +
+      '<label class="chk"><input type="checkbox" id="dfFlat"' + (S.defaults.flatten ? " checked" : "") + "> Flatten pages to images</label>" +
+      '<p class="hint">' + (Object.keys(S.edits).length
+        ? "Text you replaced is painted over, so the old wording is still selectable in the saved file. Flattening turns each page into an image first, which removes it for good — at the cost of the rest of the page no longer being selectable text."
+        : "Off by default, so the file keeps its searchable text. Turn on to render pages as images.") + "</p></div>";
+}
+function wireDocInspector() {
+  const b = (id, fn, ev) => { const n = $(id); if (n) n.addEventListener(ev || "input", fn); };
+  b("#dfInk", e => S.defaults.inkColor = e.target.value);
+  b("#dfInkW", e => S.defaults.inkWidth = parseFloat(e.target.value) || 2.4, "change");
+  b("#dfMark", e => S.defaults.markColor = e.target.value);
+  b("#dfMarkW", e => S.defaults.markWidth = parseFloat(e.target.value) || 14, "change");
+  b("#dfStroke", e => S.defaults.shapeStroke = e.target.value);
+  b("#dfSW", e => S.defaults.shapeWidth = parseFloat(e.target.value) || 1.6, "change");
+  b("#dfFill", e => { S.defaults.shapeFill = e.target.value; const n = $("#dfNoFill"); if (n) n.checked = false; });
+  b("#dfNoFill", e => S.defaults.shapeFill = e.target.checked ? "none" : ($("#dfFill") ? $("#dfFill").value : "#ffffff"), "change");
+  b("#dfFam", e => S.defaults.fam = e.target.value, "change");
+  b("#dfSize", e => S.defaults.size = parseFloat(e.target.value) || 12, "change");
+  b("#dfColor", e => S.defaults.color = e.target.value);
+  b("#dfAuto", e => S.defaults.autoBg = e.target.checked, "change");
+  b("#dfErase", e => S.defaults.eraseColor = e.target.value);
+  b("#dfStrip", e => S.defaults.strip = e.target.checked, "change");
+  b("#dfFlat", e => S.defaults.flatten = e.target.checked, "change");
+  const af = $("#addFont"), ff = $("#fontFile");
+  if (af && ff) {
+    af.addEventListener("click", () => ff.click());
+    ff.addEventListener("change", async () => { if (ff.files[0]) await addCustomFont(ff.files[0]); ff.value = ""; });
+  }
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function toolName(t) {
+  return ({ select: "Select", text: "Edit text", addtext: "Add text", draw: "Pen", mark: "Highlighter", rect: "Rectangle", ellipse: "Ellipse", line: "Line", erase: "Whiteout", place: "Place" })[t] || t;
+}
+
+/* ---------- 18. embedding a real font ---------- */
+async function addCustomFont(file) {
+  if (!/\.(ttf|otf)$/i.test(file.name)) { toast("Embedding needs a .ttf or .otf file", "warn"); return; }
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const label = file.name.replace(/\.(ttf|otf)$/i, "");
+    const family = "RG_" + label.replace(/[^a-z0-9]/gi, "_");
+    const face = new FontFace(family, bytes.buffer.slice(0));
+    await face.load();
+    document.fonts.add(face);
+    S.customFonts[label] = { bytes, family };
+    const fam = "custom:" + label;
+    if (S.selLine) {
+      updateLineStyle(S.selLine, { style: { fam, css: "", bold: false, italic: false } });
+      toast(label + " applied to the selected text");
+    } else if (S.sel) {
+      const o = objById(S.sel);
+      if (o && o.type === "text") {
+        o.fam = fam; o.css = ""; o.bold = false; o.italic = false;
+        autosizeTextObject(o, true);
+        renderObjects(indexOfKey(o.page)); snapshot(); status(); updateInspector();
+        toast(label + " applied to the selected text box");
+      }
+    }
+    if (!S.fontkitReady) toast(label + " loaded for preview, but fontkit did not load so it cannot be written into the PDF", "warn");
+    else if (!S.selLine && !S.sel) toast(label + " is ready to use");
+    updateInspector();
+  } catch (e) { toast("That font could not be read", "bad"); }
+}
+
+/* ---------- 19. history ---------- */
+function snapshot() {
+  const snap = JSON.stringify({ objects: S.objects, edits: S.edits, pageList: S.pageList });
+  if (S.history[S.hi] === snap) return;
+  S.history = S.history.slice(0, S.hi + 1);
+  S.history.push(snap);
+  if (S.history.length > 90) S.history.shift();
+  S.hi = S.history.length - 1;
+  undoButtons();
+}
+function undoButtons() {
+  $("#btnUndo").disabled = S.hi <= 0;
+  $("#btnRedo").disabled = S.hi >= S.history.length - 1;
+}
+async function applySnapshot(j) {
+  const o = JSON.parse(j);
+  const pagesChanged = JSON.stringify(S.pageList) !== JSON.stringify(o.pageList);
+  S.objects = o.objects; S.edits = o.edits; S.pageList = o.pageList;
+  S.sel = null; S.selLine = null;
+  cancelEdit();
+  if (pagesChanged) await buildPages(); else drawAllOverlays();
+  status(); updateInspector(); undoButtons();
+}
+function undo() { if (S.hi > 0) { S.hi--; applySnapshot(S.history[S.hi]); } }
+function redo() { if (S.hi < S.history.length - 1) { S.hi++; applySnapshot(S.history[S.hi]); } }
+
+/* ---------- 20. page operations ---------- */
+async function pageOp(i, action) {
+  const p = S.pageList[i];
+  if (action === "rot") { p.rotate = (((p.rotate || 0) + 90) % 360); }
+  else if (action === "dup") {
+    const c = Object.assign({}, p, { key: "k" + (++S.keyCounter) });
+    S.pageList.splice(i + 1, 0, c);
+  } else if (action === "del") {
+    if (S.pageList.length === 1) { toast("A PDF needs at least one page", "warn"); return; }
+    S.objects = S.objects.filter(o => o.page !== p.key);
+    S.pageList.splice(i, 1);
+  }
+  await buildPages(); snapshot(); status();
+}
+async function addBlank() {
+  const ref = S.pageList[currentPageIndex()] || { w: 612, h: 792 };
+  S.pageList.splice(currentPageIndex() + 1, 0, { key: "k" + (++S.keyCounter), kind: "blank", src: -1, rotate: 0, w: ref.w, h: ref.h });
+  await buildPages(); snapshot(); status();
+  toast("Blank page added");
+}
+async function movePage(from, to) {
+  if (from === to || to < 0 || to > S.pageList.length) return;
+  const [p] = S.pageList.splice(from, 1);
+  S.pageList.splice(from < to ? to - 1 : to, 0, p);
+  await buildPages(); snapshot();
+}
+
+/* ---------- 21. find & replace ---------- */
+async function ensureLines(i) {
+  const v = S.views[i]; if (!v || v.lines) return v;
+  const p = S.pageList[i];
+  if (p.kind === "blank") { v.vp1 = blankViewport(v.w1, v.h1); v.lines = []; return v; }
+  const page = await S.pdf.getPage(p.src + 1);
+  if (!v.vp1) v.vp1 = page.getViewport({ scale: 1, rotation: v.rot });
+  v.lines = await extractLines(page, v);
+  return v;
+}
+async function ensureAllLines() {
+  busy(true, "Indexing text");
+  try { for (let i = 0; i < S.views.length; i++) await ensureLines(i); }
+  finally { busy(false); }
+}
+function matcher(q, cs) {
+  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(esc, cs ? "g" : "gi");
+}
+async function findAll(replaceWith) {
+  const q = $("#findQ").value;
+  if (!q) { $("#findHits").innerHTML = ""; return; }
+  await ensureAllLines();
+  const cs = $("#findCase").checked;
+  const hits = [];
+  for (let i = 0; i < S.views.length; i++) {
+    const v = S.views[i]; if (!v.lines) continue;
+    for (const L of v.lines) {
+      const cur = S.edits[L.uid] ? S.edits[L.uid].text : L.str;
+      if (matcher(q, cs).test(cur)) hits.push({ i, L, cur });
+    }
+  }
+  if (replaceWith !== undefined) {
+    for (const h of hits) {
+      const next = h.cur.replace(matcher(q, cs), replaceWith);
+      const e = S.edits[h.L.uid];
+      if (e) { e.text = next; e.deleted = false; }
+      else S.edits[h.L.uid] = {
+        text: next, style: styleForLine(h.L),
+        bg: (sampleRegion(S.views[h.i], h.L.x - 1, h.L.top - 1, h.L.w + 2, h.L.h + 2) || {}).bg || "#ffffff",
+        deleted: false, fit: false, original: h.L.str
+      };
+    }
+    drawAllOverlays(); snapshot(); status();
+    toast(hits.length ? "Replaced " + hits.length + " run" + (hits.length > 1 ? "s" : "") : "Nothing matched", hits.length ? "" : "warn");
+  }
+  $("#findHits").innerHTML = hits.length
+    ? hits.slice(0, 60).map((h, n) =>
+        '<div class="hit" data-i="' + h.i + '" data-uid="' + h.L.uid + '"><span class="pg">p' + (h.i + 1) + "</span><span>" +
+        escapeHtml(h.cur.slice(0, 90)).replace(matcher(q, cs), m => "<mark>" + m + "</mark>") + "</span></div>").join("")
+    : '<p class="hint">No matches.</p>';
+  $$("#findHits .hit").forEach(n => n.addEventListener("click", () => {
+    const i = Number(n.dataset.i);
+    S.views[i].node.scrollIntoView({ block: "center", behavior: "smooth" });
+    setTool("text");
+    setTimeout(() => beginEdit(n.dataset.uid), 420);
+  }));
+}
+
+/* ---------- 22. writing the PDF back out ---------- */
+function dataUrlToBytes(u) {
+  const b = atob(u.split(",")[1]);
+  const a = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+  return a;
+}
+/* screen-space box -> the anchor pdf-lib wants, honouring page + text rotation */
+function boxAnchor(v, x, y, w, h, angle) {
+  const s = Math.sin(angle), c = Math.cos(angle);
+  return v.vp1.convertToPdfPoint(x - s * h, y + c * h); // local bottom-left
+}
+
+/* Re-render a page to pixels. Used by the flatten export, which is the only
+   way to be sure replaced text is gone from the file rather than painted over. */
+async function rasterizePage(i, k) {
+  const p = S.pageList[i], v = S.views[i];
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(v.w1 * k));
+  c.height = Math.max(1, Math.round(v.h1 * k));
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
+  if (p.kind === "orig") {
+    const page = await S.pdf.getPage(p.src + 1);
+    await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale: k, rotation: v.rot }) }).promise;
+  }
+  let url = c.toDataURL("image/png");
+  if (url.length > 2200000) url = c.toDataURL("image/jpeg", 0.92);
+  return url;
+}
+
+async function buildPdfBytes(flatten) {
+  const { PDFDocument, degrees } = PDFLib;
+  const src = await PDFDocument.load(S.srcBytes, { ignoreEncryption: true });
+  let out, pages;
+  const identity = !flatten && S.pageList.length === src.getPageCount() &&
+    S.pageList.every((p, i) => p.kind === "orig" && p.src === i);
+
+  if (flatten) {
+    out = await PDFDocument.create();
+    pages = [];
+    for (let i = 0; i < S.pageList.length; i++) {
+      let v = S.views[i];
+      if (!v.vp1) v = await ensureLines(i);
+      busyMsg("Flattening page " + (i + 1) + " of " + S.pageList.length);
+      const url = await rasterizePage(i, 2);
+      const bytes = dataUrlToBytes(url);
+      const img = /^data:image\/png/i.test(url) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+      const pg = out.addPage([v.w1, v.h1]);
+      pg.drawImage(img, { x: 0, y: 0, width: v.w1, height: v.h1 });
+      pages.push(pg);
+    }
+    busyMsg("Writing the PDF");
+  }
+  else if (identity) { out = src; pages = out.getPages(); }
+  else {
+    out = await PDFDocument.create();
+    const idx = S.pageList.filter(p => p.kind === "orig").map(p => p.src);
+    const copies = idx.length ? await out.copyPages(src, idx) : [];
+    let ci = 0; pages = [];
+    for (const p of S.pageList) {
+      if (p.kind === "orig") { const pg = copies[ci++]; out.addPage(pg); pages.push(pg); }
+      else pages.push(out.addPage([p.w, p.h]));
+    }
+  }
+  if (window.fontkit) { try { out.registerFontkit(window.fontkit); S.fontkitReady = true; } catch (e) {} }
+
+  const fontCache = new Map();
+  async function getFont(fam, bold, italic) {
+    const key = fam + "|" + bold + "|" + italic;
+    if (fontCache.has(key)) return fontCache.get(key);
+    let rec = null;
+    if (String(fam).indexOf("custom:") === 0) {
+      const cf = S.customFonts[fam.slice(7)];
+      if (cf && window.fontkit) {
+        try { rec = { font: await out.embedFont(cf.bytes, { subset: true }), std: false }; }
+        catch (e) { console.warn("embed failed", e); }
+      }
+    }
+    if (!rec) {
+      const base = String(fam).indexOf("custom:") === 0 ? "Helvetica" : fam;
+      rec = { font: await out.embedFont(stdFont(base, bold, italic)), std: true };
+    }
+    fontCache.set(key, rec);
+    return rec;
+  }
+  const imgCache = new Map();
+  async function getImage(o) {
+    if (!/^data:image\/(png|jpe?g);/i.test(o.data)) o.data = await normalizeImageDataUrl(o.data);
+    if (imgCache.has(o.data)) return imgCache.get(o.data);
+    const bytes = dataUrlToBytes(o.data);
+    const img = /^data:image\/png/i.test(o.data) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+    imgCache.set(o.data, img);
+    return img;
+  }
+
+  let folded = 0, strippedTotal = 0, blockedTotal = 0;
+  function drawRun(pg, text, opt) {
+    const rad = opt.rot * Math.PI / 180;
+    const ux = Math.cos(rad), uy = Math.sin(rad);
+    const common = { size: opt.size, font: opt.font, color: opt.color, rotate: degrees(opt.rot) };
+    if ((opt.target || opt.track) && text.length > 1) {
+      let natural = 0;
+      try { natural = opt.font.widthOfTextAtSize(text, opt.size); } catch (e) { natural = 0; }
+      if (natural > 0) {
+        const extra = opt.target ? (opt.target - natural) / (text.length - 1) : opt.track;
+        let adv = 0;
+        for (const ch of text) {
+          try {
+            pg.drawText(ch, Object.assign({ x: opt.x + ux * adv, y: opt.y + uy * adv }, common));
+            adv += opt.font.widthOfTextAtSize(ch, opt.size) + extra;
+          } catch (e) { adv += opt.size * 0.5 + extra; }
+        }
+        return;
+      }
+    }
+    try { pg.drawText(text, Object.assign({ x: opt.x, y: opt.y }, common)); }
+    catch (e) { console.warn("drawText", e); }
+  }
+
+  for (let i = 0; i < S.pageList.length; i++) {
+    const p = S.pageList[i], pg = pages[i];
+    let v = S.views[i];
+    if (!v) continue;
+    if (!v.vp1) v = await ensureLines(i);
+    /* A flattened page is already upright pixels, so the rotation has been
+       baked in and the mapping is the plain one. */
+    const rot = flatten ? 0 : (((p.rotate || 0) % 360) + 360) % 360;
+    if (flatten) { v = Object.create(v); v.vp1 = blankViewport(v.w1, v.h1); }
+    else pg.setRotation(degrees(rot));
+    const mb = flatten ? { x: 0, y: 0, width: v.w1, height: v.h1 } : pg.getMediaBox();
+    const topY = mb.y + mb.height;
+
+    /* 0 — lift the replaced glyphs out of the operator stream, so the old
+       words are gone from the file rather than just hidden under paint */
+    const targets = [];
+    if (v.lines) for (const L of v.lines) {
+      const e = S.edits[L.uid];
+      if (e && !appendEditSuffix(e, L)) targets.push({ uid: L.uid, x: L.x, top: L.top, w: L.w, h: L.h, fh: L.fh, angle: L.angle });
+    }
+    const touches = targets.length > 0 || S.objects.some(o => o.page === p.key);
+    if (!flatten && p.kind === "orig" && touches && S.defaults.strip !== false) {
+      const gone = stripPageText(out, pg, v.vp1, targets, true);
+      strippedTotal += gone.size;
+      blockedTotal += targets.length - gone.size;
+    }
+
+    /* 1 — cover and re-set the edited runs */
+    if (v.lines) {
+      for (const L of v.lines) {
+        const e = S.edits[L.uid];
+        if (!e) continue;
+        const suffix = appendEditSuffix(e, L);
+        if (!suffix && e.cover !== false) {
+          const pad = Math.max(0.6, L.fh * 0.1);
+          const bw = L.w + pad * 2, bh = L.h + pad * 1.2;
+          const a = boxAnchor(v, L.x - pad, L.top - pad * 0.6, bw, bh, L.angle);
+          pg.drawRectangle({
+            x: a[0], y: a[1], width: bw, height: bh,
+            color: pdfColor(e.bg || "#ffffff"),
+            rotate: degrees(rot - L.angle * 180 / Math.PI)
+          });
+        }
+        if (e.deleted || !e.text) continue;
+        const st = e.style;
+        const rec = await getFont(st.fam, st.bold, st.italic);
+        const drawText = suffix ? suffix.replace(/^\s+/, "") : e.text;
+        const f = rec.std ? foldForStandard(drawText) : { text: drawText, dropped: 0 };
+        folded += f.dropped;
+        const x = (suffix ? L.x + L.w + appendGapForStyle(st) : L.x) + stNum(st, "dx", 0);
+        const b = v.vp1.convertToPdfPoint(x, L.base + stNum(st, "dy", 0));
+        drawRun(pg, f.text, {
+          x: b[0], y: b[1], size: st.size, font: rec.font, color: pdfColor(st.color),
+          rot: rot - L.angle * 180 / Math.PI, target: !suffix && e.fit ? L.w : 0,
+          track: stNum(st, "track", 0)
+        });
+      }
+    }
+
+    /* 2 — everything the user added, in the order they added it */
+    for (const o of S.objects) {
+      if (o.page !== p.key) continue;
+      const b = bbox(o);
+      if (o.type === "erase") {
+        const a = boxAnchor(v, b.x, b.y, b.w, b.h, 0);
+        pg.drawRectangle({ x: a[0], y: a[1], width: b.w, height: b.h, color: pdfColor(o.color), rotate: degrees(rot) });
+      } else if (o.type === "rect") {
+        const a = boxAnchor(v, b.x, b.y, b.w, b.h, 0);
+        pg.drawRectangle({
+          x: a[0], y: a[1], width: b.w, height: b.h,
+          borderColor: pdfColor(o.stroke), borderWidth: o.width,
+          color: o.fill && o.fill !== "none" ? pdfColor(o.fill) : undefined,
+          opacity: o.opacity == null ? 1 : o.opacity,
+          borderOpacity: o.opacity == null ? 1 : o.opacity,
+          rotate: degrees(rot)
+        });
+      } else if (o.type === "ellipse") {
+        const c = v.vp1.convertToPdfPoint(b.x + b.w / 2, b.y + b.h / 2);
+        pg.drawEllipse({
+          x: c[0], y: c[1], xScale: b.w / 2, yScale: b.h / 2,
+          borderColor: pdfColor(o.stroke), borderWidth: o.width,
+          color: o.fill && o.fill !== "none" ? pdfColor(o.fill) : undefined,
+          opacity: o.opacity == null ? 1 : o.opacity,
+          borderOpacity: o.opacity == null ? 1 : o.opacity,
+          rotate: degrees(rot)
+        });
+      } else if (o.type === "line") {
+        const s1 = v.vp1.convertToPdfPoint(o.x, o.y);
+        const s2 = v.vp1.convertToPdfPoint(o.x + o.w, o.y + o.h);
+        pg.drawLine({
+          start: { x: s1[0], y: s1[1] }, end: { x: s2[0], y: s2[1] },
+          thickness: o.width, color: pdfColor(o.stroke),
+          opacity: o.opacity == null ? 1 : o.opacity
+        });
+      } else if (isInkLike(o)) {
+        const pts = ptsToUnit(o).map(q => {
+          const u = v.vp1.convertToPdfPoint(q[0], q[1]);
+          return [u[0] - mb.x, topY - u[1]];
+        });
+        pg.drawSvgPath(pathFromPts(pts), {
+          x: mb.x, y: topY, borderColor: pdfColor(o.color), borderWidth: o.width,
+          borderOpacity: o.type === "mark" ? 0.42 : (o.opacity == null ? 1 : o.opacity),
+          borderLineCap: PDFLib.LineCapStyle ? PDFLib.LineCapStyle.Round : undefined
+        });
+      } else if (o.type === "image") {
+        const img = await getImage(o);
+        const a = boxAnchor(v, b.x, b.y, b.w, b.h, 0);
+        pg.drawImage(img, {
+          x: a[0], y: a[1], width: b.w, height: b.h,
+          rotate: degrees(rot), opacity: o.opacity == null ? 1 : o.opacity
+        });
+      } else if (o.type === "text") {
+        const rec = await getFont(o.fam, o.bold, o.italic);
+        const m = measure("Hg", o.fam, o.bold, o.italic, o.size);
+        const half = (o.size * 1.15 - (m.asc + m.desc)) / 2;
+        const lines = String(o.text).split("\n");
+        for (let n = 0; n < lines.length; n++) {
+          const f = rec.std ? foldForStandard(lines[n]) : { text: lines[n], dropped: 0 };
+          folded += f.dropped;
+          if (!f.text) continue;
+          const by = o.y + half + m.asc + n * o.size * 1.15;
+          const q = v.vp1.convertToPdfPoint(o.x, by);
+          drawRun(pg, f.text, { x: q[0], y: q[1], size: o.size, font: rec.font, color: pdfColor(o.color), rot: rot, target: 0 });
+        }
+      }
+    }
+  }
+  S.lastStrip = { removed: strippedTotal, covered: blockedTotal };
+  if (blockedTotal > 0) toast(blockedTotal + " run(s) sit in an operator group with text that stays — those originals are covered instead of removed", "warn");
+  if (folded > 0) toast(folded + " character(s) fell outside the built-in fonts — embed a .ttf to keep them", "warn");
+  return await out.save({ useObjectStreams: true });
+}
+
+async function exportPdf(forceFlatten) {
+  if (!S.pdf) return;
+  commitEdit();
+  busy(true, "Writing the PDF");
+  try {
+    const flat = forceFlatten === true || !!S.defaults.flatten;
+    const bytes = await buildPdfBytes(flat);
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = S.fileName.replace(/\.pdf$/i, "") + (flat ? "-flattened.pdf" : "-edited.pdf");
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    toast("Saved " + a.download);
+  } catch (e) {
+    console.error(e);
+    toast("Export failed: " + (e && e.message ? e.message : "unknown"), "bad");
+  } finally { busy(false); }
+}
+
+async function mergeInto(file) {
+  busy(true, "Merging");
+  try {
+    const cur = await buildPdfBytes(false);
+    const other = new Uint8Array(await file.arrayBuffer());
+    const a = await PDFLib.PDFDocument.load(cur);
+    const b = await PDFLib.PDFDocument.load(other, { ignoreEncryption: true });
+    const pgs = await a.copyPages(b, b.getPageIndices());
+    pgs.forEach(pp => a.addPage(pp));
+    const bytes = await a.save();
+    await loadDocument(new Uint8Array(bytes));
+    toast("Merged " + file.name + " — earlier edits are now part of the file");
+  } catch (e) {
+    console.error(e);
+    toast("Merge failed: " + (e && e.message ? e.message : ""), "bad");
+  } finally { busy(false); }
+}
+
+/* ---------- 23. status line ---------- */
+function status() {
+  const n = Object.keys(S.edits).length + S.objects.length;
+  $("#statEdits").textContent = n ? n + " change" + (n > 1 ? "s" : "") : "No edits";
+  $("#editDot").classList.toggle("on", n > 0);
+  $("#statPages").textContent = S.pageList.length || "–";
+  $("#statTool").textContent = toolName(S.tool);
+  $("#pgCount").textContent = S.pageList.length;
+  if (!S.pageList.length) { $("#statPage").textContent = "–"; $("#statSize").textContent = "–"; return; }
+  const i = currentPageIndex(), p = S.pageList[i];
+  $("#statPage").textContent = i + 1;
+  if (p) $("#statSize").textContent = Math.round(p.w) + " × " + Math.round(p.h) + " pt";
+}
+
+function setTool(t) {
+  if (t !== "text") commitEdit();
+  S.tool = t;
+  document.body.dataset.tool = t;
+  $$("#toolCluster .tool").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tool === t)));
+  if (t !== "select") { S.sel = null; }
+  drawAllOverlays();
+  status(); updateInspector();
+}
+
+/* ---------- 24. signature workshop ---------- */
+const SIG_FONTS = [
+  '"Segoe Script","Bradley Hand","Brush Script MT",cursive',
+  '"Snell Roundhand","Apple Chancery","Lucida Handwriting",cursive',
+  '"Palatino Linotype","Palatino","Book Antiqua",serif',
+  '"Gabriola","Edwardian Script ITC","Zapfino",cursive'
+];
+const sig = { strokes: [], stroke: null, font: SIG_FONTS[0], tab: "draw", upload: null };
+
+function openSig() {
+  if (!S.pdf) { toast("Open a PDF first", "warn"); return; }
+  $("#sigModal").hidden = false;
+  sizeSigPad();
+  drawSigPad();
+  renderSigFonts();
+  renderSaved();
+}
+function closeSig() { $("#sigModal").hidden = true; }
+function sizeSigPad() {
+  const c = $("#sigPad");
+  const r = c.getBoundingClientRect();
+  c.width = Math.max(300, Math.round(r.width * 2));
+  c.height = Math.round(190 * 2);
+}
+function drawSigPad() {
+  const c = $("#sigPad"), x = c.getContext("2d");
+  x.clearRect(0, 0, c.width, c.height);
+  x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
+  paintStrokes(x, 2, $("#sigColor").value);
+}
+function paintStrokes(x, k, color) {
+  x.strokeStyle = color; x.lineCap = "round"; x.lineJoin = "round";
+  for (const st of sig.strokes) {
+    for (let i = 1; i < st.length; i++) {
+      x.beginPath();
+      x.lineWidth = st[i].w * k;
+      x.moveTo(st[i - 1].x * k, st[i - 1].y * k);
+      x.lineTo(st[i].x * k, st[i].y * k);
+      x.stroke();
+    }
+  }
+}
+function sigPoint(ev) {
+  const c = $("#sigPad"), r = c.getBoundingClientRect();
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+function sigDown(ev) {
+  ev.preventDefault();
+  $("#sigPad").setPointerCapture(ev.pointerId);
+  const p = sigPoint(ev);
+  const base = parseFloat($("#sigWeight").value);
+  sig.stroke = [{ x: p.x, y: p.y, w: base }];
+  sig.strokes.push(sig.stroke);
+}
+function sigMove(ev) {
+  if (!sig.stroke) return;
+  const p = sigPoint(ev);
+  const last = sig.stroke[sig.stroke.length - 1];
+  const d = Math.hypot(p.x - last.x, p.y - last.y);
+  if (d < 1) return;
+  const base = parseFloat($("#sigWeight").value);
+  const w = base * clamp(1.25 - d / 26, 0.42, 1.3);
+  sig.stroke.push({ x: p.x, y: p.y, w: last.w * 0.65 + w * 0.35 });
+  drawSigPad();
+}
+function sigUp() { sig.stroke = null; }
+
+function renderSigFonts() {
+  const wrap = $("#sigFonts");
+  wrap.innerHTML = SIG_FONTS.map((f, i) =>
+    '<button data-i="' + i + '" aria-pressed="' + (sig.font === f) + '" style="font-family:' + f + '">Signature</button>').join("");
+  $$("#sigFonts button").forEach(b => b.addEventListener("click", () => {
+    sig.font = SIG_FONTS[Number(b.dataset.i)];
+    renderSigFonts(); renderTyped();
+  }));
+}
+function renderTyped() {
+  const name = $("#sigName").value || "Your name";
+  $("#sigPreview").innerHTML = '<span style="font-family:' + sig.font + ';font-size:44px;color:' + $("#sigColor").value + '">' + escapeHtml(name) + "</span>";
+}
+function typedToCanvas() {
+  const name = $("#sigName").value.trim();
+  if (!name) return null;
+  const size = 150;
+  const c = document.createElement("canvas");
+  const x = c.getContext("2d");
+  x.font = size + "px " + sig.font;
+  const m = x.measureText(name);
+  c.width = Math.ceil(m.width + size * 0.6);
+  c.height = Math.ceil(size * 1.9);
+  const x2 = c.getContext("2d");
+  x2.font = size + "px " + sig.font;
+  x2.fillStyle = $("#sigColor").value;
+  x2.textBaseline = "alphabetic";
+  x2.fillText(name, size * 0.3, size * 1.25);
+  return trimCanvas(c);
+}
+function drawnToCanvas() {
+  if (!sig.strokes.length) return null;
+  const src = $("#sigPad");
+  const c = document.createElement("canvas");
+  c.width = src.width * 1.5; c.height = src.height * 1.5;
+  const x = c.getContext("2d");
+  paintStrokes(x, 3, $("#sigColor").value);
+  return trimCanvas(c);
+}
+async function placeSignature() {
+  let dataUrl = null;
+  if (sig.tab === "draw") { const c = drawnToCanvas(); if (c) dataUrl = c.toDataURL("image/png"); }
+  else if (sig.tab === "type") { const c = typedToCanvas(); if (c) dataUrl = c.toDataURL("image/png"); }
+  else dataUrl = sig.upload;
+  if (!dataUrl) { toast("Draw, type or upload a signature first", "warn"); return; }
+  if (!S.sigs.includes(dataUrl)) S.sigs.unshift(dataUrl);
+  S.sigs = S.sigs.slice(0, 8);
+  closeSig();
+  await stageImage(dataUrl, 190, true);
+}
+function renderSaved() {
+  $("#savedWrap").style.display = S.sigs.length ? "block" : "none";
+  $("#savedSigs").innerHTML = S.sigs.map((d, i) => '<div class="s" data-i="' + i + '"><img src="' + d + '"></div>').join("");
+  $$("#savedSigs .s").forEach(n => n.addEventListener("click", async () => {
+    closeSig(); await stageImage(S.sigs[Number(n.dataset.i)], 190, true);
+  }));
+}
+
+/* =====================================================================
+   27. Content-stream surgery
+   Painting a white box over old text is what most "editors" do — the
+   glyphs are still in the file and still come out on copy/paste or a
+   search. This walks the page's real operator stream, finds the text
+   operators that belong to a run being replaced, and takes them out.
+   ===================================================================== */
+const WS = " \n\r\t\f\0";
+const DELIM = "()<>[]{}/%";
+const isWS = c => WS.indexOf(c) >= 0;
+const isDelim = c => DELIM.indexOf(c) >= 0;
+
+function lexContent(s) {
+  const toks = [], n = s.length;
+  let i = 0;
+  while (i < n) {
+    const c = s[i];
+    if (isWS(c)) { i++; continue; }
+    if (c === "%") { while (i < n && s[i] !== "\n" && s[i] !== "\r") i++; continue; }
+    const start = i;
+    if (c === "(") {
+      let depth = 0;
+      for (; i < n; i++) {
+        const ch = s[i];
+        if (ch === "\\") { i++; continue; }
+        if (ch === "(") depth++;
+        else if (ch === ")") { depth--; if (depth === 0) { i++; break; } }
+      }
+      toks.push({ t: "str", start, end: i }); continue;
+    }
+    if (c === "<" && s[i + 1] === "<") { toks.push({ t: "dop", start, end: i + 2 }); i += 2; continue; }
+    if (c === "<") { const j = s.indexOf(">", i); i = j < 0 ? n : j + 1; toks.push({ t: "str", start, end: i }); continue; }
+    if (c === ">" && s[i + 1] === ">") { toks.push({ t: "dcl", start, end: i + 2 }); i += 2; continue; }
+    if (c === "[" || c === "]" || c === "{" || c === "}") { i++; toks.push({ t: c, start, end: i }); continue; }
+    if (c === "/") { i++; while (i < n && !isWS(s[i]) && !isDelim(s[i])) i++; toks.push({ t: "name", start, end: i }); continue; }
+    if ((c >= "0" && c <= "9") || c === "+" || c === "-" || c === ".") {
+      i++; while (i < n && /[0-9.eE+\-]/.test(s[i])) i++;
+      toks.push({ t: "num", start, end: i }); continue;
+    }
+    i++; while (i < n && !isWS(s[i]) && !isDelim(s[i])) i++;
+    const op = s.slice(start, i);
+    if (op === "BI") { // inline image: skip to EI without lexing the samples
+      let j = s.indexOf("ID", i);
+      if (j < 0) { toks.push({ t: "op", start, end: i, v: op }); continue; }
+      j += 2;
+      while (j < n) {
+        const k = s.indexOf("EI", j);
+        if (k < 0) { j = n; break; }
+        if (isWS(s[k - 1]) && (k + 2 >= n || isWS(s[k + 2]) || isDelim(s[k + 2]))) { j = k + 2; break; }
+        j = k + 2;
+      }
+      toks.push({ t: "op", start, end: j, v: "BI" }); i = j; continue;
+    }
+    toks.push({ t: "op", start, end: i, v: op });
+  }
+  return toks;
+}
+
+function matMul(m, n) {
+  return [
+    m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3],
+    m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
+    m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]
+  ];
+}
+
+/* Is a baseline origin inside the run we are replacing? Works for
+   rotated text by measuring in the run's own frame. */
+function insideTarget(T, px, py) {
+  const dx = px - T.x, dy = py - T.top;
+  const c = Math.cos(T.angle), s = Math.sin(T.angle);
+  const lx = dx * c + dy * s, ly = -dx * s + dy * c;
+  const tx = Math.max(1.5, T.fh * 0.35), ty = Math.max(1.5, T.fh * 0.3);
+  return lx >= -tx && lx <= T.w + tx && ly >= -ty && ly <= T.h + ty;
+}
+
+/* Walk the stream, decide which show operators go.
+   Td / TD / T* / Tm all move relative to the *line* matrix, which showing
+   text never touches — so dropping a show operator cannot shift anything
+   that repositions afterwards. The only unsafe case is a second show
+   operator riding on the first one's advance, and that is handled by
+   refusing to touch such a group unless every member is going. */
+function planStrip(src, vp1, targets) {
+  const toks = lexContent(src);
+  const num = t => parseFloat(src.slice(t.start, t.end)) || 0;
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack = [];
+  let tm = [1, 0, 0, 1, 0, 0], tlm = [1, 0, 0, 1, 0, 0];
+  let fs = 1, rise = 0, hscale = 1;
+  let group = 0;
+  const shows = [];
+  let operands = [];
+  let arrayStart = -1;
+
+  for (let i = 0; i < toks.length; i++) {
+    const tk = toks[i];
+    if (tk.t !== "op") {
+      if (tk.t === "[") arrayStart = i;
+      operands.push(i);
+      continue;
+    }
+    const op = tk.v;
+    const nOps = operands.length;
+    const arg = k => { const idx = operands[nOps - k]; return idx == null ? 0 : num(toks[idx]); };
+
+    switch (op) {
+      case "q": stack.push(ctm.slice()); break;
+      case "Q": if (stack.length) ctm = stack.pop(); break;
+      case "cm": ctm = matMul([arg(6), arg(5), arg(4), arg(3), arg(2), arg(1)], ctm); break;
+      case "BT": tm = [1, 0, 0, 1, 0, 0]; tlm = tm.slice(); group++; break;
+      case "ET": group++; break;
+      case "Tf": fs = arg(1); break;
+      case "Tz": hscale = arg(1) / 100; break;
+      case "Ts": rise = arg(1); break;
+      case "TL": break;
+      case "Tm": tlm = [arg(6), arg(5), arg(4), arg(3), arg(2), arg(1)]; tm = tlm.slice(); group++; break;
+      case "Td": tlm = matMul([1, 0, 0, 1, arg(2), arg(1)], tlm); tm = tlm.slice(); group++; break;
+      case "TD": tlm = matMul([1, 0, 0, 1, arg(2), arg(1)], tlm); tm = tlm.slice(); group++; break;
+      case "T*": tlm = matMul([1, 0, 0, 1, 0, 0], tlm); tm = tlm.slice(); group++; break;
+      case "Tj": case "TJ": case "'": case "\"": {
+        if (op === "'" || op === "\"") { tm = tlm.slice(); group++; }
+        const trm = matMul([fs * hscale, 0, 0, fs, 0, rise], matMul(tm, ctm));
+        const dev = vp1.convertToViewportPoint(trm[4], trm[5]);
+        let hit = null;
+        for (const T of targets) if (insideTarget(T, dev[0], dev[1])) { hit = T; break; }
+        let from;
+        if (op === "TJ") from = arrayStart >= 0 ? arrayStart : i;
+        else if (op === "\"") from = operands.length >= 3 ? operands[operands.length - 3] : i;
+        else from = operands.length >= 1 ? operands[operands.length - 1] : i;
+        shows.push({
+          i, group, hit, from,
+          start: toks[from].start, end: tk.end,
+          op, aw: op === "\"" ? arg(3) : 0, ac: op === "\"" ? arg(2) : 0
+        });
+        break;
+      }
+      default: break;
+    }
+    operands = [];
+    if (op !== "TJ") arrayStart = -1;
+  }
+
+  /* a group is only safe to touch if every show operator in it is going */
+  const byGroup = new Map();
+  for (const s of shows) {
+    const g = byGroup.get(s.group) || { all: [], hits: 0 };
+    g.all.push(s); if (s.hit) g.hits++;
+    byGroup.set(s.group, g);
+  }
+  const edits = [], stripped = new Set();
+  const blocked = new Set();
+  for (const [, g] of byGroup) {
+    if (!g.hits) continue;
+    if (g.hits !== g.all.length) { for (const s of g.all) if (s.hit) blocked.add(s.hit.uid); continue; }
+    for (const s of g.all) {
+      let repl = "";
+      if (s.op === "'") repl = "T*";
+      else if (s.op === "\"") repl = s.aw + " Tw " + s.ac + " Tc T*";
+      edits.push({ start: s.start, end: s.end, text: repl });
+    }
+  }
+  for (const s of shows) if (s.hit && !blocked.has(s.hit.uid)) stripped.add(s.hit.uid);
+  for (const uid of blocked) stripped.delete(uid);
+  edits.sort((a, b) => a.start - b.start);
+  return { edits, stripped };
+}
+
+function bytesToLatin1(u8) {
+  let s = "";
+  const CH = 0x8000;
+  for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+  return s;
+}
+function latin1ToBytes(s) {
+  const u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i) & 255;
+  return u;
+}
+function readPageContent(doc, page) {
+  const c = page.node.Contents();
+  if (!c) return null;
+  const parts = [];
+  try {
+    if (c instanceof PDFLib.PDFArray) {
+      for (const ref of c.asArray()) {
+        const st = doc.context.lookup(ref);
+        if (st) parts.push(bytesToLatin1(PDFLib.decodePDFRawStream(st).decode()));
+      }
+    } else {
+      parts.push(bytesToLatin1(PDFLib.decodePDFRawStream(c).decode()));
+    }
+  } catch (e) { return null; }
+  return parts.join("\n");
+}
+function writePageContent(doc, page, str) {
+  const ref = doc.context.register(doc.context.flateStream(latin1ToBytes(str)));
+  page.node.set(PDFLib.PDFName.of("Contents"), ref);
+}
+
+/* Returns the set of run ids whose glyphs were genuinely removed. */
+function stripPageText(doc, page, vp1, targets, wrap) {
+  const src = readPageContent(doc, page);
+  if (src == null) return new Set();
+  let out = src, stripped = new Set();
+  if (targets && targets.length) {
+    try {
+      const plan = planStrip(src, vp1, targets);
+      stripped = plan.stripped;
+      if (plan.edits.length) {
+        let buf = "", cursor = 0;
+        for (const e of plan.edits) {
+          if (e.start < cursor) continue;
+          buf += src.slice(cursor, e.start) + e.text;
+          cursor = e.end;
+        }
+        buf += src.slice(cursor);
+        out = buf;
+      }
+    } catch (e) { console.warn("strip failed", e); return new Set(); }
+  }
+  /* Balance the original content so anything drawn afterwards starts from a
+     clean graphics state — a classic source of misplaced additions. */
+  if (wrap) out = "q\n" + out + "\nQ\n";
+  if (out !== src) { try { writePageContent(doc, page, out); } catch (e) { return new Set(); } }
+  return stripped;
+}
+
+/* ---------- 25. wiring ---------- */
+function wire() {
+  /* files */
+  const fi = $("#fileInput");
+  $("#btnOpen").addEventListener("click", () => fi.click());
+  $("#btnOpen2").addEventListener("click", () => fi.click());
+  fi.addEventListener("change", () => { if (fi.files[0]) openFile(fi.files[0]); fi.value = ""; });
+
+  const vpEl = $("#viewport");
+  ["dragenter", "dragover"].forEach(t => vpEl.addEventListener(t, e => { e.preventDefault(); vpEl.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach(t => vpEl.addEventListener(t, e => { e.preventDefault(); if (t === "dragleave" && e.target !== vpEl) return; vpEl.classList.remove("dragover"); }));
+  vpEl.addEventListener("drop", e => {
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    if (/pdf$/i.test(f.name)) openFile(f);
+    else if (/^image\//.test(f.type)) fileToDataUrl(f).then(d => stageImage(d, 240, false));
+  });
+
+  /* tools */
+  $$("#toolCluster .tool").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
+  $("#btnSign").addEventListener("click", openSig);
+  const ii = $("#imgInput");
+  $("#btnImage").addEventListener("click", () => { if (!S.pdf) { toast("Open a PDF first", "warn"); return; } ii.click(); });
+  ii.addEventListener("change", async () => {
+    if (ii.files[0]) { const d = await fileToDataUrl(ii.files[0]); await stageImage(d, 240, false); }
+    ii.value = "";
+  });
+
+  $("#btnUndo").addEventListener("click", undo);
+  $("#btnRedo").addEventListener("click", redo);
+  $("#btnExport").addEventListener("click", () => exportPdf(false));
+  $("#btnExportFlat").addEventListener("click", () => exportPdf(true));
+  $("#btnPages").addEventListener("click", () => $("#pagesPanel").classList.toggle("collapsed"));
+  $("#btnBlank").addEventListener("click", addBlank);
+  const mi = $("#mergeInput");
+  $("#btnMerge").addEventListener("click", () => mi.click());
+  mi.addEventListener("change", () => { if (mi.files[0]) mergeInto(mi.files[0]); mi.value = ""; });
+
+  /* zoom */
+  $("#zIn").addEventListener("click", () => setZoom(S.scale * 1.2));
+  $("#zOut").addEventListener("click", () => setZoom(S.scale / 1.2));
+  $("#zFit").addEventListener("click", () => { fitWidth(); });
+  vpEl.addEventListener("wheel", e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    setZoom(S.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+  }, { passive: false });
+
+  /* page canvas interaction */
+  document.addEventListener("pointerdown", e => {
+    if (e.target.closest(".tedit")) return;
+    if (!e.target.closest(".page")) return;
+    if (e.target.closest(".l-capture")) onCaptureDown(e);
+    else if (e.target.closest(".l-obj") || e.target.closest(".l-text")) onObjDown(e);
+  });
+  document.addEventListener("pointermove", e => { onCaptureMove(e); onObjMove(e); });
+  document.addEventListener("pointerup", () => { onCaptureUp(); onObjUp(); });
+  document.addEventListener("pointercancel", () => { onCaptureUp(); onObjUp(); });
+  document.addEventListener("dblclick", e => {
+    const o = e.target.closest(".obj");
+    if (o) { const ob = objById(o.dataset.id); if (ob && ob.type === "text") beginObjTextEdit(ob.id, true); }
+    const line = e.target.closest(".tline");
+    if (line) { e.preventDefault(); beginEdit(line.dataset.uid, "replace"); }
+  });
+
+  /* thumbnails */
+  const th = $("#thumbs");
+  th.addEventListener("click", e => {
+    const t = e.target.closest(".thumb"); if (!t) return;
+    const i = Number(t.dataset.i);
+    const btn = e.target.closest("[data-a]");
+    if (btn) { pageOp(i, btn.dataset.a); return; }
+    S.views[i].node.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+  let dragFrom = null;
+  th.addEventListener("dragstart", e => {
+    const t = e.target.closest(".thumb"); if (!t) return;
+    dragFrom = Number(t.dataset.i); t.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", String(dragFrom)); } catch (err) {}
+  });
+  th.addEventListener("dragover", e => {
+    e.preventDefault();
+    const t = e.target.closest(".thumb");
+    $$("#thumbs .thumb").forEach(n => n.classList.remove("dropbefore"));
+    if (t) t.classList.add("dropbefore");
+  });
+  th.addEventListener("drop", e => {
+    e.preventDefault();
+    const t = e.target.closest(".thumb");
+    $$("#thumbs .thumb").forEach(n => n.classList.remove("dropbefore", "dragging"));
+    if (t && dragFrom != null) movePage(dragFrom, Number(t.dataset.i));
+    dragFrom = null;
+  });
+  th.addEventListener("dragend", () => { $$("#thumbs .thumb").forEach(n => n.classList.remove("dropbefore", "dragging")); dragFrom = null; });
+
+  /* find */
+  $("#btnFind").addEventListener("click", () => {
+    const p = $("#findPanel");
+    p.hidden = !p.hidden;
+    if (!p.hidden) $("#findQ").focus();
+  });
+  $("#findClose").addEventListener("click", () => $("#findPanel").hidden = true);
+  $("#findAll").addEventListener("click", () => findAll());
+  $("#replaceAll").addEventListener("click", () => findAll($("#findR").value));
+  $("#findQ").addEventListener("keydown", e => { if (e.key === "Enter") findAll(); e.stopPropagation(); });
+  $("#findR").addEventListener("keydown", e => e.stopPropagation());
+
+  /* signature modal */
+  $("#sigClose").addEventListener("click", closeSig);
+  $("#sigCancel").addEventListener("click", closeSig);
+  $("#sigPlace").addEventListener("click", placeSignature);
+  $("#sigModal").addEventListener("pointerdown", e => { if (e.target.id === "sigModal") closeSig(); });
+  $("#sigClear").addEventListener("click", () => { sig.strokes = []; drawSigPad(); });
+  $("#sigColor").addEventListener("input", () => { drawSigPad(); renderTyped(); });
+  $("#sigName").addEventListener("input", renderTyped);
+  $("#sigName").addEventListener("keydown", e => e.stopPropagation());
+  const pad = $("#sigPad");
+  pad.addEventListener("pointerdown", sigDown);
+  pad.addEventListener("pointermove", sigMove);
+  pad.addEventListener("pointerup", sigUp);
+  pad.addEventListener("pointerleave", sigUp);
+  $$("#sigTabs button").forEach(b => b.addEventListener("click", () => {
+    sig.tab = b.dataset.tab;
+    $$("#sigTabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+    $$("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== sig.tab);
+    if (sig.tab === "draw") { sizeSigPad(); drawSigPad(); }
+    if (sig.tab === "type") renderTyped();
+  }));
+  const sf = $("#sigFile");
+  $("#sigDrop").addEventListener("click", () => sf.click());
+  sf.addEventListener("change", async () => {
+    if (!sf.files[0]) return;
+    const raw = await fileToDataUrl(sf.files[0]);
+    sig.upload = await keyOutBackground(raw);
+    const pv = $("#sigUpPreview");
+    pv.style.display = "grid";
+    pv.innerHTML = '<img src="' + sig.upload + '" style="max-height:100px">';
+    sf.value = "";
+  });
+
+  /* scroll bookkeeping */
+  let raf = null;
+  vpEl.addEventListener("scroll", () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = null; status(); markActiveThumb(); });
+  });
+  window.addEventListener("resize", () => { if (S.pdf) markActiveThumb(); });
+
+  /* keyboard */
+  document.addEventListener("keydown", e => {
+    const t = e.target;
+    const typing = t && (t.isContentEditable || t.closest?.(".tedit") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); exportPdf(); return; }
+    if (mod && e.key.toLowerCase() === "o") { e.preventDefault(); fi.click(); return; }
+    if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); $("#findPanel").hidden = false; $("#findQ").focus(); return; }
+    if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if (typing) return;
+    if (e.key === "Escape") { cancelEdit(); S.sel = null; S.pending = null; if (S.tool === "place") setTool("select"); drawAllOverlays(); updateInspector(); return; }
+    if ((e.key === "Delete" || e.key === "Backspace") && S.sel) { e.preventDefault(); removeObject(S.sel); return; }
+    if ((e.key === "Delete" || e.key === "Backspace") && S.selLine) { e.preventDefault(); updateLineStyle(S.selLine, { deleted: true, text: "" }); return; }
+    const map = { v: "select", e: "text", t: "addtext", d: "draw", h: "mark", r: "rect", o: "ellipse", l: "line", x: "erase" };
+    const k = e.key.toLowerCase();
+    if (map[k]) { setTool(map[k]); return; }
+    if (k === "s") { openSig(); return; }
+  });
+}
+
+/* ---------- 26. boot ---------- */
+async function setupWorker() {
+  for (const u of SOURCES.worker) {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) continue;
+      const txt = await r.text();
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([txt], { type: "text/javascript" }));
+      return true;
+    } catch (e) { /* next mirror */ }
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = SOURCES.worker[0];
+  return false;
+}
+
+async function init() {
+  busy(true, "Loading the PDF engine");
+  try {
+    await loadFirst(SOURCES.pdfjs, "pdfjsLib");
+    await setupWorker();
+    await loadFirst(SOURCES.pdflib, "PDFLib");
+  } catch (e) {
+    busy(false);
+    $("#empty").innerHTML = '<div class="drop"><h1>The PDF engine could not load</h1>' +
+      '<p>Registry pulls pdf.js and pdf-lib from a CDN on first run. Check the network connection and reload.</p></div>';
+    return;
+  }
+  try { await loadFirst(SOURCES.fontkit, "fontkit"); S.fontkitReady = !!window.fontkit; } catch (e) { S.fontkitReady = false; }
+  busy(false);
+  wire();
+  updateInspector();
+  status();
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
+
+})();
+
+</script>
+</body>
+</html>

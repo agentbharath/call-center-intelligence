@@ -6,3 +6,5 @@ data/
 *.db
 .python-version
 .DS_Store
+node_modules/
+dist/
